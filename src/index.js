@@ -112,7 +112,7 @@ function scheduleBookingForToday(channelId, messageId) {
   console.log(`Booking scheduled for ${runAt.toISOString()}`);
 }
 
-client.on('ready', () => {
+client.on('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
 
   const pollChannelId = getPollChannelId();
