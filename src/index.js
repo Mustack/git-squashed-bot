@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import schedule from 'node-schedule';
+import { parseTime, formatTime } from './utils/parseTime.js';
 
 const REACTION_EMOJI = '👍';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
@@ -31,14 +32,27 @@ function getBookingHour() {
   return Number.isNaN(hour) ? 18 : Math.max(0, Math.min(23, hour));
 }
 
-/** Channel ID where the weekly poll is posted (required for 9am Sunday auto-post). */
+/** Channel ID where the weekly poll is posted (required for Sunday auto-post). */
 function getPollChannelId() {
   return (process.env.DISCORD_POLL_CHANNEL_ID || '').trim();
 }
 
+/** Poll time from env (e.g. "12:35pm"). Default 12:35pm. */
+function getPollTime() {
+  const raw = (process.env.POLL_TIME || '12:35pm').trim();
+  try {
+    return parseTime(raw);
+  } catch (e) {
+    console.warn(`Invalid POLL_TIME "${raw}", using 12:35pm. ${e.message}`);
+    return parseTime('12:35pm');
+  }
+}
+
 async function countReactions(message) {
   try {
-    const reaction = message.reactions.cache.find((r) => r.emoji.name === REACTION_EMOJI);
+    const reaction = message.reactions.cache.find(
+      (r) => r.emoji.name === REACTION_EMOJI
+    );
     if (!reaction) return 0;
     await reaction.users.fetch();
     const users = reaction.users.cache.filter((u) => !u.bot);
@@ -103,8 +117,12 @@ client.on('ready', () => {
 
   const pollChannelId = getPollChannelId();
   if (pollChannelId) {
-    schedule.scheduleJob('0 0 9 * * 0', async () => {
-      console.log('Sunday 9am: posting squash poll');
+    const { hour, minute } = getPollTime();
+    const cron = `0 ${minute} ${hour} * * 0`; // Sunday
+    schedule.scheduleJob(cron, async () => {
+      console.log(
+        `Sunday ${formatTime({ hour, minute })}: posting squash poll`
+      );
       try {
         const channel = await client.channels.fetch(pollChannelId);
         const pollMessage = await channel.send(POLL_TEXT);
@@ -117,7 +135,9 @@ client.on('ready', () => {
         console.error('Sunday poll failed:', e);
       }
     });
-    console.log('Scheduled weekly poll for Sundays at 9:00 AM');
+    console.log(
+      `Scheduled weekly poll for Sundays at ${formatTime({ hour, minute })}`
+    );
   }
 });
 
