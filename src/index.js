@@ -6,6 +6,11 @@ import { parseTime, formatTime } from './utils/parseTime.js';
 const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
 
+/** Default time to post the weekly poll on Sundays (e.g. "12:35pm"). Override with POLL_TIME env. */
+const DEFAULT_POLL_TIME = '12:35pm';
+/** Default time to run the booking script the same day (e.g. "12:45pm"). Override with BOOKING_TIME env. */
+const DEFAULT_BOOKING_TIME = '12:45pm';
+
 /** @type {{ messageId: string, channelId: string } | null} */
 let scheduledPoll = null;
 
@@ -27,9 +32,15 @@ function getCommandPrefix() {
   return (process.env.COMMAND_PREFIX || '!').trim();
 }
 
-function getBookingHour() {
-  const hour = parseInt(process.env.BOOKING_HOUR || '18', 10);
-  return Number.isNaN(hour) ? 18 : Math.max(0, Math.min(23, hour));
+/** Booking time from env. Uses DEFAULT_BOOKING_TIME if unset. */
+function getBookingTime() {
+  const raw = (process.env.BOOKING_TIME || DEFAULT_BOOKING_TIME).trim();
+  try {
+    return parseTime(raw);
+  } catch (e) {
+    console.warn(`Invalid BOOKING_TIME "${raw}", using ${DEFAULT_BOOKING_TIME}. ${e.message}`);
+    return parseTime(DEFAULT_BOOKING_TIME);
+  }
 }
 
 /** Channel ID where the weekly poll is posted (required for Sunday auto-post). */
@@ -37,14 +48,14 @@ function getPollChannelId() {
   return (process.env.DISCORD_POLL_CHANNEL_ID || '').trim();
 }
 
-/** Poll time from env (e.g. "12:35pm"). Default 12:35pm. */
+/** Poll time from env. Uses DEFAULT_POLL_TIME if unset. */
 function getPollTime() {
-  const raw = (process.env.POLL_TIME || '12:41pm').trim();
+  const raw = (process.env.POLL_TIME || DEFAULT_POLL_TIME).trim();
   try {
     return parseTime(raw);
   } catch (e) {
-    console.warn(`Invalid POLL_TIME "${raw}", using 12:35pm. ${e.message}`);
-    return parseTime('12:35pm');
+    console.warn(`Invalid POLL_TIME "${raw}", using ${DEFAULT_POLL_TIME}. ${e.message}`);
+    return parseTime(DEFAULT_POLL_TIME);
   }
 }
 
@@ -78,10 +89,10 @@ async function runBooking(count) {
 }
 
 function scheduleBookingForToday(channelId, messageId) {
-  const hour = getBookingHour();
+  const { hour, minute } = getBookingTime();
   const now = new Date();
   let runAt = new Date(now);
-  runAt.setHours(hour, 0, 0, 0);
+  runAt.setHours(hour, minute, 0, 0);
   if (runAt <= now) {
     runAt.setDate(runAt.getDate() + 1);
   }
@@ -128,6 +139,11 @@ client.on('clientReady', () => {
         const pollMessage = await channel.send(POLL_TEXT);
         await pollMessage.react(REACTION_EMOJI);
         scheduleBookingForToday(channel.id, pollMessage.id);
+        await channel.send(
+          `React with ${REACTION_EMOJI} if you're in. Booking will run at **${formatTime(
+            getBookingTime()
+          )}** today.`
+        );
       } catch (e) {
         console.error('Sunday poll failed:', e.message);
         if (e.code === 50001) {
@@ -164,7 +180,9 @@ client.on('messageCreate', async (message) => {
     await pollMessage.react(REACTION_EMOJI);
     scheduleBookingForToday(message.channel.id, pollMessage.id);
     await message.channel.send(
-      `Poll posted. React with ${REACTION_EMOJI} if you're in. Booking will run at **${getBookingHour()}:00** today.`
+      `Poll posted. React with ${REACTION_EMOJI} if you're in. Booking will run at **${formatTime(
+        getBookingTime()
+      )}** today.`
     );
   }
 });

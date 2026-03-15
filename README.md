@@ -39,7 +39,7 @@ Optional in `.env`:
 
 - `POLL_TIME` – when to post the poll on Sundays. Use a time like **`12:35pm`**, **`9am`**, or **`18:00`** (24h). Default: `12:35pm`.
 - `COMMAND_PREFIX` – default `!` (e.g. `!squash`).
-- `BOOKING_HOUR` – hour (0–23) to run booking; default `18` (6pm).
+- `BOOKING_TIME` – when to run the booking script (e.g. `12:45pm`, `6pm`, `18:00`). Default: `12:45pm`.
 - `BOOKING_URL`, `BOOKING_USER`, `BOOKING_PASSWORD`, `HEADLESS` – used by your booking script if you need them.
 
 ### 3. Install and run
@@ -70,7 +70,7 @@ Use `HEADLESS=false` to watch the browser while developing.
 
 1. **Sunday** – If `DISCORD_POLL_CHANNEL_ID` is set, the bot posts the poll at the time in `POLL_TIME` (default 12:35pm). Otherwise post manually with **`!squash`** or **`!poll`**.
 2. The bot adds a ✋ reaction. Everyone clicks the reaction to say they’re in.
-3. At 6pm the same day (or the hour in `BOOKING_HOUR`), the bot runs `scripts/book-courts.mjs` with `COURT_COUNT` set to the number of people who reacted, then posts a short confirmation in the same channel.
+3. At the time set by `BOOKING_TIME` (default 12:45pm) the same day, the bot runs `scripts/book-courts.mjs` with `COURT_COUNT` set to the number of people who reacted, then posts a short confirmation in the same channel.
 
 **Note:** The 6pm job is scheduled when the poll is posted (Sunday or when you run `!squash`). If the bot restarts before 6pm, that day’s run is lost; post the poll again to reschedule.
 
