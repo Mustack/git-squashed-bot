@@ -85,7 +85,8 @@ export async function runBookingFlow(page, courtCount) {
         await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         continue;
       }
-      await timeSlot.click();
+      // Click via getByRole (works when slot is available and not aria-hidden)
+      await page.getByRole('link', { name: timeLabelRegex }).first().click();
       await page.waitForLoadState('networkidle');
 
       // Contact details from env
