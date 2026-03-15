@@ -6,7 +6,7 @@ A Discord bot for the "git squashed" squash group: run a weekly "who's in?" poll
 
 ## What it does
 
-1. **Poll** – The bot posts _"Who's in for squash this week?"_ every **Sunday** at a time you set (default **12:35 PM**, see `POLL_TIME` in `.env`) in your configured channel (and adds a 👍 reaction). You can also run `!squash` or `!poll` anytime to post manually.
+1. **Poll** – The bot posts _"Who's in for squash this week?"_ every **Sunday** at a time you set (default **12:35 PM**, see `POLL_TIME` in `.env`) in your configured channel (and adds a ✋ reaction). You can also run `!squash` or `!poll` anytime to post manually.
 2. **Count** – The bot counts how many people (excluding itself) reacted.
 3. **Book** – At 6pm the same day it runs your Playwright script with `COURT_COUNT` set to **1 court per 2 attendees** (e.g. 4 attendees → 2 courts). The bot’s own reaction is not counted.
 
@@ -64,7 +64,7 @@ Use `HEADLESS=false` to watch the browser while developing.
 ## Usage
 
 1. **Sunday** – If `DISCORD_POLL_CHANNEL_ID` is set, the bot posts the poll at the time in `POLL_TIME` (default 12:35pm). Otherwise post manually with **`!squash`** or **`!poll`**.
-2. The bot adds a 👍 reaction. Everyone clicks the reaction to say they’re in.
+2. The bot adds a ✋ reaction. Everyone clicks the reaction to say they’re in.
 3. At 6pm the same day (or the hour in `BOOKING_HOUR`), the bot runs `scripts/book-courts.mjs` with `COURT_COUNT` set to the number of people who reacted, then posts a short confirmation in the same channel.
 
 **Note:** The 6pm job is scheduled when the poll is posted (Sunday or when you run `!squash`). If the bot restarts before 6pm, that day’s run is lost; post the poll again to reschedule.

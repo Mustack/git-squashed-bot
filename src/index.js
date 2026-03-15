@@ -3,7 +3,7 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import schedule from 'node-schedule';
 import { parseTime, formatTime } from './utils/parseTime.js';
 
-const REACTION_EMOJI = '👍';
+const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
 
 /** @type {{ messageId: string, channelId: string } | null} */
