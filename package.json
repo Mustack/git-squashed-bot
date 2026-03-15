@@ -1,0 +1,19 @@
+{
+  "name": "git-squashed-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for organizing squash group and booking courts",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "book": "node src/run-booking.js"
+  },
+  "keywords": ["discord", "squash", "bot"],
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "node-schedule": "^2.1.1",
+    "playwright": "^1.40.1"
+  }
+}
