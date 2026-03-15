@@ -97,6 +97,8 @@ export async function runBookingFlow(page, courtCount) {
       await page.getByLabel(/name/i).fill(name);
 
       await page.getByRole('button', { name: /confirm/i }).click();
+      await page.getByRole('button', { name: /final confirmation/i }).click();
+
       console.log(
         `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_TIME}`,
       );
