@@ -11,10 +11,10 @@ const BOOKING_URL =
 const COURT_PRIORITY_ORDER = [1, 2, 3, 5, 7, 9];
 
 /** Day of week to book (e.g. "Tuesday"). Override with BOOKING_DAY in .env. */
-const BOOKING_DAY = process.env.BOOKING_DAY || 'Monday';
+const BOOKING_DAY = process.env.BOOKING_DAY || 'Tuesday';
 
 /** Time slot label to click (e.g. "8:00 p.m."). Override with BOOKING_TIME in .env. */
-const BOOKING_TIME = process.env.BOOKING_TIME || '3:00 p.m.';
+const BOOKING_TIME = process.env.BOOKING_TIME || '8:00 p.m.';
 
 /** How long to keep retrying when the day isn't available yet (ms). */
 const DAY_RETRY_DEADLINE_MS = 5 * 60 * 1000;
@@ -105,8 +105,7 @@ export async function runBookingFlow(page, courtCount) {
       await page.getByLabel(/email address/i).fill(email);
       await page.getByLabel(/name/i).fill(name);
 
-      // Uncomment this to make the bot actually book
-      // await page.getByRole('button', { name: /confirm/i }).click();
+      await page.getByRole('button', { name: /confirm/i }).click();
       await page.getByRole('button', { name: /final confirmation/i }).click();
 
       console.log(

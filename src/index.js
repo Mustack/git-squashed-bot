@@ -7,9 +7,9 @@ const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
 
 /** Default time to post the weekly poll on Sundays (e.g. "12:35pm"). Override with POLL_TIME env. */
-const DEFAULT_POLL_TIME = '2:47pm';
+const DEFAULT_POLL_TIME = '3:02pm';
 /** Default time to run the booking script the same day (e.g. "12:45pm"). Override with BOOKING_TIME env. */
-const DEFAULT_BOOKING_TIME = '2:49pm';
+const DEFAULT_BOOKING_TIME = '6:00pm';
 
 /** @type {{ messageId: string, channelId: string } | null} */
 let scheduledPoll = null;
@@ -72,9 +72,7 @@ async function countReactions(message) {
     await reaction.users.fetch();
     const users = reaction.users.cache.filter((u) => !u.bot);
 
-    // Don't leave this in production
-    return users.size * 2;
-    // return users.size;
+    return users.size;
   } catch (e) {
     console.error('Failed to count reactions:', e);
     return 0;
