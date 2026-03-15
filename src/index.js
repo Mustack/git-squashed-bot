@@ -74,17 +74,23 @@ async function countReactions(message) {
   }
 }
 
+/**
+ * Runs the booking script. Returns true if it exited with code 0, false otherwise.
+ */
 async function runBooking(count) {
-  console.log(`Running booking for ${count} court(s)...`);
   const { spawn } = await import('child_process');
-  const env = { ...process.env, COURT_COUNT: String(count) };
-  const child = spawn('node', ['src/run-booking.js'], {
-    env,
-    stdio: 'inherit',
-    cwd: process.cwd(),
-  });
-  child.on('close', (code) => {
-    if (code !== 0) console.error(`Booking script exited with code ${code}`);
+  return new Promise((resolve) => {
+    console.log(`Running booking for ${count} court(s)...`);
+    const env = { ...process.env, COURT_COUNT: String(count) };
+    const child = spawn('node', ['src/run-booking.js'], {
+      env,
+      stdio: 'inherit',
+      cwd: process.cwd(),
+    });
+    child.on('close', (code) => {
+      if (code !== 0) console.error(`Booking script exited with code ${code}`);
+      resolve(code === 0);
+    });
   });
 }
 
@@ -107,11 +113,17 @@ function scheduleBookingForToday(channelId, messageId) {
       const message = await channel.messages.fetch(messageId);
       const attendees = await countReactions(message); // excludes bot
       const courts = Math.max(1, Math.ceil(attendees / 2)); // 1 court per 2 attendees
-      await runBooking(courts);
-      const reply = await channel.send(
-        `Booked **${courts}** court(s) for ${attendees} attendee(s). Check the booking site to confirm.`
-      );
-      setTimeout(() => reply.delete().catch(() => {}), 30_000);
+      const success = await runBooking(courts);
+      if (success) {
+        const reply = await channel.send(
+          `Booked **${courts}** court(s) for ${attendees} attendee(s). Check the booking site to confirm.`
+        );
+        setTimeout(() => reply.delete().catch(() => {}), 30_000);
+      } else {
+        await channel.send(
+          `⚠️ The booking script failed for **${courts}** court(s). Check the server logs and try booking manually.`
+        );
+      }
     } catch (e) {
       console.error('Booking job failed:', e);
     } finally {
