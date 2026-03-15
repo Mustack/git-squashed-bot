@@ -105,6 +105,7 @@ export async function runBookingFlow(page, courtCount) {
       await page.getByLabel(/email address/i).fill(email);
       await page.getByLabel(/name/i).fill(name);
 
+      // Uncomment this to make the bot actually book
       // await page.getByRole('button', { name: /confirm/i }).click();
       await page.getByRole('button', { name: /final confirmation/i }).click();
 
