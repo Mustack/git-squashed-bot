@@ -39,7 +39,7 @@ function getPollChannelId() {
 
 /** Poll time from env (e.g. "12:35pm"). Default 12:35pm. */
 function getPollTime() {
-  const raw = (process.env.POLL_TIME || '12:35pm').trim();
+  const raw = (process.env.POLL_TIME || '12:41pm').trim();
   try {
     return parseTime(raw);
   } catch (e) {
@@ -128,9 +128,6 @@ client.on('clientReady', () => {
         const pollMessage = await channel.send(POLL_TEXT);
         await pollMessage.react(REACTION_EMOJI);
         scheduleBookingForToday(channel.id, pollMessage.id);
-        await channel.send(
-          `React with ${REACTION_EMOJI} if you're in. Booking will run at **${getBookingHour()}:00** today.`
-        );
       } catch (e) {
         console.error('Sunday poll failed:', e.message);
         if (e.code === 50001) {
