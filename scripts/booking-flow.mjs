@@ -60,19 +60,27 @@ export async function runBookingFlow(page, courtCount) {
       await dayOption.click();
       await page.waitForLoadState('networkidle');
 
-      // Click time slot; label starts with the time but may have more text
+      // Find time slot: text may be in a child (e.g. <a><span>3:00 p.m.</span></a>), so find by text then get the link
       const timeLabelRegex = new RegExp(
         `^${BOOKING_TIME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
       );
-      const timeSlot = page.getByRole('link', { name: timeLabelRegex }).first();
-      const isDisabled = await timeSlot
+      const timeSlot = page
+        .getByText(timeLabelRegex)
+        .locator('xpath=ancestor::a[1]')
+        .first();
+      const isUnavailable = await timeSlot
         .evaluate(
-          (el) =>
-            el.hasAttribute('disabled') ||
-            el.getAttribute('aria-disabled') === 'true',
+          (el) => {
+            const parent = el.parentElement;
+            if (!parent) return false;
+            return (
+              parent.classList.contains('reserved') ||
+              parent.getAttribute('aria-hidden') === 'true'
+            );
+          },
         )
         .catch(() => false);
-      if (isDisabled) {
+      if (isUnavailable) {
         console.log(
           `[book-courts] Court ${courtNum}: ${BOOKING_TIME} is taken, trying next court.`,
         );
