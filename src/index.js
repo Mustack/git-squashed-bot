@@ -132,7 +132,18 @@ client.on('clientReady', () => {
           `React with ${REACTION_EMOJI} if you're in. Booking will run at **${getBookingHour()}:00** today.`
         );
       } catch (e) {
-        console.error('Sunday poll failed:', e);
+        console.error('Sunday poll failed:', e.message);
+        if (e.code === 50001) {
+          console.error(
+            '\nMissing Access (50001): The bot cannot see or use that channel. Fix:'
+          );
+          console.error(
+            '  • Re-invite the bot with "View Channel", "Send Messages", "Read Message History", "Add Reactions".'
+          );
+          console.error(
+            '  • In the channel, ensure the bot’s role is allowed to view and send messages.\n'
+          );
+        }
       }
     });
     console.log(

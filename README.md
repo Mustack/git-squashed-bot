@@ -17,7 +17,12 @@ A Discord bot for the "git squashed" squash group: run a weekly "who's in?" poll
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications) → New Application.
 2. Under **Bot**, create a bot and copy the **Token** (for `DISCORD_BOT_TOKEN`).
 3. **Enable "Message Content Intent"** – In the Bot page, scroll to **Privileged Gateway Intents** and turn **Message Content Intent** ON. (Without this you’ll get "Used disallowed intents" on login.)
-4. Invite the bot to your server (OAuth2 → URL Generator → scopes: `bot`; permissions: Send Messages, Read Message History, Add Reactions).
+4. **Invite the bot to your server**
+   - In the left sidebar go to **OAuth2** → **URL Generator**.
+   - Under **SCOPES** tick **bot**.
+   - Under **BOT PERMISSIONS** tick: View Channel, Send Messages, Read Message History, Add Reactions.
+   - Copy the **Generated URL**, open it in your browser, choose your server, and click **Authorize**.
+   - If you get "Missing Access (50001)" later, open the same URL again and re-authorize so the bot gets the updated permissions.
 
 ### 2. Environment
 
