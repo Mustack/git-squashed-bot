@@ -11,7 +11,9 @@ const HEADLESS = process.env.HEADLESS !== 'false';
 
 async function main() {
   const browser = await chromium.launch({ headless: HEADLESS });
-  const context = await browser.newContext();
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 2400 },
+  });
   const page = await context.newPage();
 
   try {
