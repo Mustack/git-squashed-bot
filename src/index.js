@@ -162,6 +162,17 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN).catch((e) => {
-  console.error('Login failed:', e);
+  console.error('Login failed:', e.message);
+  if (/disallowed intents/i.test(e.message)) {
+    console.error(
+      '\nEnable the required intents in the Discord Developer Portal:'
+    );
+    console.error('  1. Go to https://discord.com/developers/applications');
+    console.error('  2. Select your application → Bot (left sidebar)');
+    console.error(
+      '  3. Under "Privileged Gateway Intents", turn ON "Message Content Intent"'
+    );
+    console.error('  4. Save and restart the bot.\n');
+  }
   process.exit(1);
 });
