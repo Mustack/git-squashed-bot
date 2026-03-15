@@ -26,11 +26,11 @@ const DAY_RETRY_WAIT_MS = 3000;
  * Runs the booking flow on the given page. Tries courts in priority order until one has the time slot available.
  * If the day of the week isn't on the page yet, waits 3s, refreshes, and retries for up to 5 minutes.
  * @param {import('playwright').Page} page - Playwright page (from script or test)
- * @param {number} courtCount - Number of courts to book (currently one booking per run; order is still used to pick which court to try first)
+ * @param {number} courtCount - Number of courts to book (currently one booking per run). Courts are tried in COURT_PRIORITY_ORDER until one has the slot available.
  */
 export async function runBookingFlow(page, courtCount) {
   const deadline = Date.now() + DAY_RETRY_DEADLINE_MS;
-  const courtsToTry = COURT_PRIORITY_ORDER.slice(0, Math.max(1, courtCount));
+  const courtsToTry = COURT_PRIORITY_ORDER;
   const dayRegex = new RegExp(`${BOOKING_DAY}.*\\d{4}`);
 
   while (Date.now() < deadline) {
@@ -69,16 +69,14 @@ export async function runBookingFlow(page, courtCount) {
         .locator('xpath=ancestor::a[1]')
         .first();
       const isUnavailable = await timeSlot
-        .evaluate(
-          (el) => {
-            const parent = el.parentElement;
-            if (!parent) return false;
-            return (
-              parent.classList.contains('reserved') ||
-              parent.getAttribute('aria-hidden') === 'true'
-            );
-          },
-        )
+        .evaluate((el) => {
+          const parent = el.parentElement;
+          if (!parent) return false;
+          return (
+            parent.classList.contains('reserved') ||
+            parent.getAttribute('aria-hidden') === 'true'
+          );
+        })
         .catch(() => false);
       if (isUnavailable) {
         console.log(
@@ -104,7 +102,7 @@ export async function runBookingFlow(page, courtCount) {
       await page.getByLabel(/email address/i).fill(email);
       await page.getByLabel(/name/i).fill(name);
 
-      await page.getByRole('button', { name: /confirm/i }).click();
+      // await page.getByRole('button', { name: /confirm/i }).click();
       await page.getByRole('button', { name: /final confirmation/i }).click();
 
       console.log(
