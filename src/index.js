@@ -13,6 +13,9 @@ const DEFAULT_BOOKING_TIME = '6:00pm';
 
 /** When true, speed up timings for local testing (poll 1 min from start, booking 2 min from start). */
 const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
+/** When true, record and upload Playwright booking videos. */
+const IS_VIDEO_RECORDING_ENABLED =
+  String(process.env.IS_VIDEO_RECORDING_ENABLED || '').toLowerCase() === 'true';
 
 /** @type {{ messageId: string, channelId: string } | null} */
 let scheduledPoll = null;
@@ -143,13 +146,14 @@ function scheduleBookingForToday(channelId, messageId) {
       const channel = await client.channels.fetch(channelId);
       const message = await channel.messages.fetch(messageId);
       const attendees = await countReactions(message); // excludes bot
-      const courts = Math.max(1, Math.ceil(attendees / 2)); // 1 court per 2 attendees
+      const baseCourts = Math.max(1, Math.ceil(attendees / 2)); // 1 court per 2 attendees
+      const courts = DRY_RUN ? attendees * 2 + 1 : baseCourts;
       const { ok, videoPath } = await runBooking(courts);
       if (ok) {
         await channel.send(
           `Booked **${courts}** court(s) for ${attendees} attendee(s). Check the booking site to confirm.`,
         );
-        if (videoPath) {
+        if (IS_VIDEO_RECORDING_ENABLED && videoPath) {
           await channel.send({
             content: 'Here is the booking run video:',
             files: [videoPath],

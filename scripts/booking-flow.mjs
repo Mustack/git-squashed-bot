@@ -18,6 +18,8 @@ const BOOKING_TIME = process.env.BOOKING_TIME || '8:00 p.m.';
 
 /** When true, don't submit the form; just navigate as if booking succeeded. */
 const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
+/** Optional extra delay after clicks in DRY_RUN mode (ms). Default: 2000. */
+const DRY_RUN_CLICK_DELAY_MS = Number(process.env.DRY_RUN_CLICK_DELAY || '2000') || 0;
 
 /** How long to keep retrying when the day isn't available yet (ms). */
 const DAY_RETRY_DEADLINE_MS = 5 * 60 * 1000;
@@ -54,7 +56,7 @@ export async function runBookingFlow(page, courtCount) {
       console.log(`[book-courts] Trying court ${courtNum} (${courtLabel})`);
       await courtLink.click();
       if (DRY_RUN) {
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
       }
       await page.waitForLoadState('networkidle');
 
@@ -75,7 +77,7 @@ export async function runBookingFlow(page, courtCount) {
       );
       await dayOption.click();
       if (DRY_RUN) {
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
       }
       await page.waitForLoadState('networkidle');
 
@@ -138,7 +140,7 @@ export async function runBookingFlow(page, courtCount) {
       // Click the <a> we found via aria-label
       await timeSlot.click();
       if (DRY_RUN) {
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
       }
       await page.waitForLoadState('networkidle');
 
@@ -165,11 +167,11 @@ export async function runBookingFlow(page, courtCount) {
         console.log('[book-courts] Submitting confirmation buttons…');
         await page.getByRole('button', { name: /confirm/i }).click();
         if (DRY_RUN) {
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
         }
         await page.getByRole('button', { name: /final confirmation/i }).click();
         if (DRY_RUN) {
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
         }
 
         console.log(
