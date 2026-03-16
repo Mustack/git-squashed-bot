@@ -182,6 +182,12 @@ export async function runBookingFlow(page, courtCount) {
       );
       if (bookedCount >= courtCount) {
         console.log('[book-courts] Reached requested courtCount, stopping.');
+        if (DRY_RUN) {
+          console.log(
+            '[book-courts] DRY_RUN=true: refreshing back to start page after final booking attempt.',
+          );
+          await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+        }
         return;
       }
       console.log('[book-courts] Returning to start page to try next court…');
