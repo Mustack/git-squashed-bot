@@ -169,7 +169,7 @@ function scheduleBookingForToday(channelId, messageId) {
             bookedMsg = `I could only get courts: ${list}. You needed ${courts} courts. Keep an eye on the booking site to see if any more courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
           }
         } else {
-          bookedMsg = `I could not get any courts. They're probably all taken, but somebody should probably check the booking site to confirm: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+          bookedMsg = `I could not get any courts. You needed ${courts} courts. They're probably all taken, but somebody should probably check the booking site to confirm: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
         }
         await channel.send(bookedMsg);
         if (IS_VIDEO_RECORDING_ENABLED && videoPath) {
