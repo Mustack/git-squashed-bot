@@ -12,7 +12,7 @@ const HEADLESS = process.env.HEADLESS !== 'false';
 async function main() {
   const browser = await chromium.launch({ headless: HEADLESS });
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 2400 },
+    viewport: { width: 1280, height: 1680 },
     recordVideo: {
       dir: 'test-results/discord-videos',
       size: { width: 1280, height: 720 },

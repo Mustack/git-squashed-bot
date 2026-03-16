@@ -15,14 +15,14 @@ export default defineConfig({
       'https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie',
     trace: 'on-first-retry',
     headless: false,
-    viewport: { width: 1280, height: 3600 },
+    viewport: { width: 1280, height: 1680 },
   },
   projects: [
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        viewport: { width: 1280, height: 2400 },
+        viewport: { width: 1280, height: 1680 },
       },
     },
   ],

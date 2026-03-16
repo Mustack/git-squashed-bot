@@ -38,7 +38,11 @@ export async function runBookingFlow(page, courtCount) {
   let bookedCount = 0;
 
   while (Date.now() < deadline) {
+    console.log(
+      `[book-courts] Starting booking loop. DRY_RUN=${DRY_RUN}, courtCount=${courtCount}, alreadyBooked=${bookedCount}`,
+    );
     await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+    console.log(`[book-courts] Landed on booking URL: ${BOOKING_URL}`);
 
     let dayNotVisible = false;
 
@@ -47,6 +51,7 @@ export async function runBookingFlow(page, courtCount) {
       const courtLabel = `Squash - court ${courtNum}`;
       const courtLink = page.getByRole('link', { name: courtLabel });
 
+      console.log(`[book-courts] Trying court ${courtNum} (${courtLabel})`);
       await courtLink.click();
       await page.waitForLoadState('networkidle');
 
@@ -62,12 +67,18 @@ export async function runBookingFlow(page, courtCount) {
         break;
       }
 
+      console.log(
+        `[book-courts] Found day link matching /${BOOKING_DAY}.*\\d{4}/, clicking it…`,
+      );
       await dayOption.click();
       await page.waitForLoadState('networkidle');
 
       // Find time slot: text may be in a child (e.g. <a><span>3:00 p.m.</span></a>), so find by text then get the link
       const timeLabelRegex = new RegExp(
         `^${BOOKING_TIME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      );
+      console.log(
+        `[book-courts] Looking for time slot starting with "${BOOKING_TIME}"…`,
       );
       const timeSlot = page
         .getByText(timeLabelRegex)
@@ -90,6 +101,9 @@ export async function runBookingFlow(page, courtCount) {
         await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         continue;
       }
+      console.log(
+        `[book-courts] Time slot appears available on court ${courtNum}, clicking it…`,
+      );
       // Click via getByRole (works when slot is available and not aria-hidden)
       await page.getByRole('link', { name: timeLabelRegex }).first().click();
       await page.waitForLoadState('networkidle');
@@ -99,6 +113,7 @@ export async function runBookingFlow(page, courtCount) {
           `[book-courts] DRY_RUN=true: would book Squash - court ${courtNum} at ${BOOKING_TIME} (skipping contact details and confirmation).`,
         );
       } else {
+        console.log('[book-courts] Filling contact form with env values…');
         // Contact details from env
         const phone = process.env.BOOKING_PHONE ?? '';
         const email = process.env.BOOKING_EMAIL ?? '';
@@ -113,6 +128,7 @@ export async function runBookingFlow(page, courtCount) {
         await page.getByLabel(/email address/i).fill(email);
         await page.getByLabel(/name/i).fill(name);
 
+        console.log('[book-courts] Submitting confirmation buttons…');
         await page.getByRole('button', { name: /confirm/i }).click();
         await page.getByRole('button', { name: /final confirmation/i }).click();
 
@@ -121,7 +137,14 @@ export async function runBookingFlow(page, courtCount) {
         );
       }
       bookedCount++;
-      if (bookedCount >= courtCount) return;
+      console.log(
+        `[book-courts] Finished booking attempt for court ${courtNum}. bookedCount=${bookedCount}/${courtCount}`,
+      );
+      if (bookedCount >= courtCount) {
+        console.log('[book-courts] Reached requested courtCount, stopping.');
+        return;
+      }
+      console.log('[book-courts] Returning to start page to try next court…');
       await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
     }
 
