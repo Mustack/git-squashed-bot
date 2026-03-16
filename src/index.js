@@ -11,6 +11,9 @@ const DEFAULT_POLL_TIME = '9:00am';
 /** Default time to run the booking script the same day (e.g. "12:45pm"). Override with BOOKING_TIME env. */
 const DEFAULT_BOOKING_TIME = '6:00pm';
 
+/** When true, speed up timings for local testing (poll 1 min from start, booking 2 min from start). */
+const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
+
 /** @type {{ messageId: string, channelId: string } | null} */
 let scheduledPoll = null;
 
@@ -117,12 +120,18 @@ async function runBooking(count) {
 }
 
 function scheduleBookingForToday(channelId, messageId) {
-  const { hour, minute } = getBookingTime();
   const now = new Date();
-  let runAt = new Date(now);
-  runAt.setHours(hour, minute, 0, 0);
-  if (runAt <= now) {
-    runAt.setDate(runAt.getDate() + 1);
+  let runAt;
+  if (DRY_RUN) {
+    // In DRY_RUN, always book 1 minutes from poll being sent
+    runAt = new Date(now.getTime() + 1 * 60 * 1000);
+  } else {
+    const { hour, minute } = getBookingTime();
+    runAt = new Date(now);
+    runAt.setHours(hour, minute, 0, 0);
+    if (runAt <= now) {
+      runAt.setDate(runAt.getDate() + 1);
+    }
   }
 
   if (bookingJob) bookingJob.cancel();
@@ -167,35 +176,52 @@ client.on('clientReady', () => {
 
   const pollChannelId = getPollChannelId();
   if (pollChannelId) {
-    const { hour, minute } = getPollTime();
-    const cron = `0 ${minute} ${hour} * * 0`; // Sunday
-    schedule.scheduleJob(cron, async () => {
-      console.log(
-        `Sunday ${formatTime({ hour, minute })}: posting squash poll`,
-      );
-      try {
-        const channel = await client.channels.fetch(pollChannelId);
-        const pollMessage = await channel.send(POLL_TEXT);
-        await pollMessage.react(REACTION_EMOJI);
-        scheduleBookingForToday(channel.id, pollMessage.id);
-      } catch (e) {
-        console.error('Sunday poll failed:', e.message);
-        if (e.code === 50001) {
-          console.error(
-            '\nMissing Access (50001): The bot cannot see or use that channel. Fix:',
-          );
-          console.error(
-            '  • Re-invite the bot with "View Channel", "Send Messages", "Read Message History", "Add Reactions".',
-          );
-          console.error(
-            '  • In the channel, ensure the bot’s role is allowed to view and send messages.\n',
-          );
+    if (DRY_RUN) {
+      // In DRY_RUN, post a one-off poll 1 minute from now instead of a weekly Sunday cron
+      const runAt = new Date(Date.now() + 1 * 60 * 1000);
+      schedule.scheduleJob(runAt, async () => {
+        console.log(`DRY_RUN: posting squash poll at ${runAt}`);
+        try {
+          const channel = await client.channels.fetch(pollChannelId);
+          const pollMessage = await channel.send(POLL_TEXT);
+          await pollMessage.react(REACTION_EMOJI);
+          scheduleBookingForToday(channel.id, pollMessage.id);
+        } catch (e) {
+          console.error('DRY_RUN poll failed:', e.message);
         }
-      }
-    });
-    console.log(
-      `Scheduled weekly poll for Sundays at ${formatTime({ hour, minute })}`,
-    );
+      });
+      console.log(`DRY_RUN: scheduled poll for ${runAt.toISOString()}`);
+    } else {
+      const { hour, minute } = getPollTime();
+      const cron = `0 ${minute} ${hour} * * 0`; // Sunday
+      schedule.scheduleJob(cron, async () => {
+        console.log(
+          `Sunday ${formatTime({ hour, minute })}: posting squash poll`,
+        );
+        try {
+          const channel = await client.channels.fetch(pollChannelId);
+          const pollMessage = await channel.send(POLL_TEXT);
+          await pollMessage.react(REACTION_EMOJI);
+          scheduleBookingForToday(channel.id, pollMessage.id);
+        } catch (e) {
+          console.error('Sunday poll failed:', e.message);
+          if (e.code === 50001) {
+            console.error(
+              '\nMissing Access (50001): The bot cannot see or use that channel. Fix:',
+            );
+            console.error(
+              '  • Re-invite the bot with "View Channel", "Send Messages", "Read Message History", "Add Reactions".',
+            );
+            console.error(
+              '  • In the channel, ensure the bot’s role is allowed to view and send messages.\n',
+            );
+          }
+        }
+      });
+      console.log(
+        `Scheduled weekly poll for Sundays at ${formatTime({ hour, minute })}`,
+      );
+    }
   }
 });
 
