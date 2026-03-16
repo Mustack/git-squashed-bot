@@ -79,17 +79,42 @@ export async function runBookingFlow(page, courtCount) {
       }
       await page.waitForLoadState('networkidle');
 
-      // Find time slot: text may be in a child (e.g. <a><span>3:00 p.m.</span></a>), so find by text then get the link
-      const timeLabelRegex = new RegExp(
-        `^${BOOKING_TIME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      // Find time slot: label (aria-label on the <a>) starts with time and includes the day,
+      // e.g. aria-label="8:00 p.m. Tuesday March 18, 2025"
+      const timeEscaped = BOOKING_TIME.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
       );
+      const dayEscaped = BOOKING_DAY.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
+      const timeLabelRegex = new RegExp(`^${timeEscaped}\\s+${dayEscaped}`);
       console.log(
         `[book-courts] Looking for time slot starting with "${BOOKING_TIME}"…`,
       );
-      const timeSlot = page
-        .getByText(timeLabelRegex)
-        .locator('xpath=ancestor::a[1]')
-        .first();
+      // Match against aria-label of the <a>, not its visible text
+      const allTimeLinks = page.locator('a[aria-label]');
+      const linkCount = await allTimeLinks.count();
+      let timeSlot = null;
+      for (let i = 0; i < linkCount; i++) {
+        const candidate = allTimeLinks.nth(i);
+        const label = (await candidate.getAttribute('aria-label')) || '';
+        if (timeLabelRegex.test(label)) {
+          timeSlot = candidate;
+          console.log(
+            `[book-courts] Matched time slot aria-label="${label}" on link index ${i}.`,
+          );
+          break;
+        }
+      }
+      if (!timeSlot) {
+        console.log(
+          `[book-courts] No <a> with aria-label matching ${timeLabelRegex} found for court ${courtNum}; trying next court.`,
+        );
+        await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+        continue;
+      }
       const isUnavailable = await timeSlot
         .evaluate((el) => {
           const parent = el.parentElement;
@@ -110,8 +135,8 @@ export async function runBookingFlow(page, courtCount) {
       console.log(
         `[book-courts] Time slot appears available on court ${courtNum}, clicking it…`,
       );
-      // Click via getByRole (works when slot is available and not aria-hidden)
-      await page.getByRole('link', { name: timeLabelRegex }).first().click();
+      // Click the <a> we found via aria-label
+      await timeSlot.click();
       if (DRY_RUN) {
         await page.waitForTimeout(2000);
       }
