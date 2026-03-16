@@ -219,9 +219,6 @@ client.on('clientReady', () => {
       );
     } else {
       const { hour, minute } = getPollTime();
-      console.log(
-        `[config] poll cron="${cron}", POLL_TIME_RAW="${rawPoll}" BOOKING_TIME_RAW="${rawBooking}"`,
-      );
       const cron = `0 ${minute} ${hour} * * 0`; // Sunday
       schedule.scheduleJob(cron, async () => {
         console.log(
@@ -248,8 +245,11 @@ client.on('clientReady', () => {
         }
       });
       const rawPoll = (process.env.POLL_TIME || DEFAULT_POLL_TIME).trim();
+      const rawBooking = (
+        process.env.BOOKING_TIME || DEFAULT_BOOKING_TIME
+      ).trim();
       console.log(
-        `[config] DRY_RUN=false; poll cron="${cron}", POLL_TIME_RAW="${rawPoll}"`,
+        `[config] DRY_RUN=false; poll cron="${cron}", POLL_TIME_RAW="${rawPoll}", BOOKING_TIME_RAW="${rawBooking}"`,
       );
     }
   } else {
