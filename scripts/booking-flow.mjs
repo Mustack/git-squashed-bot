@@ -16,6 +16,9 @@ const BOOKING_DAY = process.env.BOOKING_DAY || 'Tuesday';
 /** Time slot label to click (e.g. "8:00 p.m."). Override with BOOKING_TIME in .env. */
 const BOOKING_TIME = process.env.BOOKING_TIME || '8:00 p.m.';
 
+/** When true, don't submit the form; just navigate as if booking succeeded. */
+const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
+
 /** How long to keep retrying when the day isn't available yet (ms). */
 const DAY_RETRY_DEADLINE_MS = 5 * 60 * 1000;
 
@@ -91,26 +94,32 @@ export async function runBookingFlow(page, courtCount) {
       await page.getByRole('link', { name: timeLabelRegex }).first().click();
       await page.waitForLoadState('networkidle');
 
-      // Contact details from env
-      const phone = process.env.BOOKING_PHONE ?? '';
-      const email = process.env.BOOKING_EMAIL ?? '';
-      const name = process.env.BOOKING_NAME ?? '';
-      if (!phone || !email || !name) {
-        throw new Error(
-          'Set BOOKING_PHONE, BOOKING_EMAIL, and BOOKING_NAME in .env for the booking form.',
+      if (DRY_RUN) {
+        console.log(
+          `[book-courts] DRY_RUN=true: would book Squash - court ${courtNum} at ${BOOKING_TIME} (skipping contact details and confirmation).`,
+        );
+      } else {
+        // Contact details from env
+        const phone = process.env.BOOKING_PHONE ?? '';
+        const email = process.env.BOOKING_EMAIL ?? '';
+        const name = process.env.BOOKING_NAME ?? '';
+        if (!phone || !email || !name) {
+          throw new Error(
+            'Set BOOKING_PHONE, BOOKING_EMAIL, and BOOKING_NAME in .env for the booking form.',
+          );
+        }
+
+        await page.getByLabel(/phone number/i).fill(phone);
+        await page.getByLabel(/email address/i).fill(email);
+        await page.getByLabel(/name/i).fill(name);
+
+        await page.getByRole('button', { name: /confirm/i }).click();
+        await page.getByRole('button', { name: /final confirmation/i }).click();
+
+        console.log(
+          `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_TIME}`,
         );
       }
-
-      await page.getByLabel(/phone number/i).fill(phone);
-      await page.getByLabel(/email address/i).fill(email);
-      await page.getByLabel(/name/i).fill(name);
-
-      await page.getByRole('button', { name: /confirm/i }).click();
-      await page.getByRole('button', { name: /final confirmation/i }).click();
-
-      console.log(
-        `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_TIME}`,
-      );
       bookedCount++;
       if (bookedCount >= courtCount) return;
       await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
