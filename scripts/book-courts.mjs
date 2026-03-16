@@ -13,11 +13,20 @@ async function main() {
   const browser = await chromium.launch({ headless: HEADLESS });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 2400 },
+    recordVideo: {
+      dir: 'test-results/discord-videos',
+      size: { width: 1280, height: 720 },
+    },
   });
   const page = await context.newPage();
 
   try {
     await runBookingFlow(page, COURT_COUNT);
+    const video = await page.video();
+    if (video) {
+      const videoPath = await video.path();
+      console.log(`[book-courts] VIDEO_PATH=${videoPath}`);
+    }
   } finally {
     await browser.close();
   }

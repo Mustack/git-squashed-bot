@@ -80,7 +80,8 @@ async function countReactions(message) {
 }
 
 /**
- * Runs the booking script. Returns true if it exited with code 0, false otherwise.
+ * Runs the booking script.
+ * Returns an object { ok: boolean, videoPath: string | null }.
  */
 async function runBooking(count) {
   const { spawn } = await import('child_process');
@@ -89,12 +90,28 @@ async function runBooking(count) {
     const env = { ...process.env, COURT_COUNT: String(count) };
     const child = spawn('node', ['src/run-booking.js'], {
       env,
-      stdio: 'inherit',
       cwd: process.cwd(),
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
+
+    let videoPath = null;
+
+    child.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      process.stdout.write(chunk);
+      const match = text.match(/VIDEO_PATH=(.+)\s*$/m);
+      if (match) {
+        videoPath = match[1].trim();
+      }
+    });
+
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+    });
+
     child.on('close', (code) => {
       if (code !== 0) console.error(`Booking script exited with code ${code}`);
-      resolve(code === 0);
+      resolve({ ok: code === 0, videoPath });
     });
   });
 }
@@ -118,12 +135,17 @@ function scheduleBookingForToday(channelId, messageId) {
       const message = await channel.messages.fetch(messageId);
       const attendees = await countReactions(message); // excludes bot
       const courts = Math.max(1, Math.ceil(attendees / 2)); // 1 court per 2 attendees
-      const success = await runBooking(courts);
-      if (success) {
-        const reply = await channel.send(
+      const { ok, videoPath } = await runBooking(courts);
+      if (ok) {
+        await channel.send(
           `Booked **${courts}** court(s) for ${attendees} attendee(s). Check the booking site to confirm.`,
         );
-        setTimeout(() => reply.delete().catch(() => {}), 30_000);
+        if (videoPath) {
+          await channel.send({
+            content: 'Here is the booking run video:',
+            files: [videoPath],
+          });
+        }
       } else {
         await channel.send(
           `⚠️ The booking script failed for **${courts}** court(s). Check the server logs and try booking manually.`,
