@@ -7,8 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "book": "node src/run-booking.js",
-    "book:ui": "cross-env COURT_COUNT=1 playwright test tests/book-courts.spec.js --ui",
-    "postinstall": "npx playwright install --with-deps chromium"
+    "book:ui": "cross-env COURT_COUNT=1 playwright test tests/book-courts.spec.js --ui"
   },
   "keywords": [
     "discord",
