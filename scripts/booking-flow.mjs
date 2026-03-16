@@ -19,7 +19,8 @@ const BOOKING_TIME = process.env.BOOKING_TIME || '8:00 p.m.';
 /** When true, don't submit the form; just navigate as if booking succeeded. */
 const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
 /** Optional extra delay after clicks in DRY_RUN mode (ms). Default: 2000. */
-const DRY_RUN_CLICK_DELAY_MS = Number(process.env.DRY_RUN_CLICK_DELAY || '2000') || 0;
+const DRY_RUN_CLICK_DELAY_MS =
+  Number(process.env.DRY_RUN_CLICK_DELAY || '2000') || 0;
 
 /** How long to keep retrying when the day isn't available yet (ms). */
 const DAY_RETRY_DEADLINE_MS = 5 * 60 * 1000;
@@ -85,14 +86,8 @@ export async function runBookingFlow(page, courtCount) {
 
       // Find time slot: label (aria-label on the <a>) starts with time and includes the day,
       // e.g. aria-label="8:00 p.m. Tuesday March 18, 2025"
-      const timeEscaped = BOOKING_TIME.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        '\\$&',
-      );
-      const dayEscaped = BOOKING_DAY.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        '\\$&',
-      );
+      const timeEscaped = BOOKING_TIME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const dayEscaped = BOOKING_DAY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const timeLabelRegex = new RegExp(`^${timeEscaped}\\s+${dayEscaped}`);
       console.log(
         `[book-courts] Looking for time slot starting with "${BOOKING_TIME}"…`,
@@ -193,9 +188,7 @@ export async function runBookingFlow(page, courtCount) {
           );
           await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         }
-        console.log(
-          `[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`,
-        );
+        console.log(`[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`);
         return;
       }
       console.log('[book-courts] Returning to start page to try next court…');
