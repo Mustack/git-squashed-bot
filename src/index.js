@@ -177,8 +177,8 @@ client.on('clientReady', () => {
   const pollChannelId = getPollChannelId();
   if (pollChannelId) {
     if (DRY_RUN) {
-      // In DRY_RUN, send poll right away
-      const runAt = new Date(Date.now());
+      // In DRY_RUN, post a one-off poll 5 seconds from now instead of a weekly Sunday cron
+      const runAt = new Date(Date.now() + 50);
       schedule.scheduleJob(runAt, async () => {
         console.log(`DRY_RUN: posting squash poll at ${runAt}`);
         try {

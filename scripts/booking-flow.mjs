@@ -53,6 +53,9 @@ export async function runBookingFlow(page, courtCount) {
 
       console.log(`[book-courts] Trying court ${courtNum} (${courtLabel})`);
       await courtLink.click();
+      if (DRY_RUN) {
+        await page.waitForTimeout(2000);
+      }
       await page.waitForLoadState('networkidle');
 
       // If the day isn't on the page yet (reservations not open), wait 3s, refresh, and restart
@@ -71,6 +74,9 @@ export async function runBookingFlow(page, courtCount) {
         `[book-courts] Found day link matching /${BOOKING_DAY}.*\\d{4}/, clicking it…`,
       );
       await dayOption.click();
+      if (DRY_RUN) {
+        await page.waitForTimeout(2000);
+      }
       await page.waitForLoadState('networkidle');
 
       // Find time slot: text may be in a child (e.g. <a><span>3:00 p.m.</span></a>), so find by text then get the link
@@ -106,6 +112,9 @@ export async function runBookingFlow(page, courtCount) {
       );
       // Click via getByRole (works when slot is available and not aria-hidden)
       await page.getByRole('link', { name: timeLabelRegex }).first().click();
+      if (DRY_RUN) {
+        await page.waitForTimeout(2000);
+      }
       await page.waitForLoadState('networkidle');
 
       if (DRY_RUN) {
@@ -130,7 +139,13 @@ export async function runBookingFlow(page, courtCount) {
 
         console.log('[book-courts] Submitting confirmation buttons…');
         await page.getByRole('button', { name: /confirm/i }).click();
+        if (DRY_RUN) {
+          await page.waitForTimeout(2000);
+        }
         await page.getByRole('button', { name: /final confirmation/i }).click();
+        if (DRY_RUN) {
+          await page.waitForTimeout(2000);
+        }
 
         console.log(
           `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_TIME}`,
