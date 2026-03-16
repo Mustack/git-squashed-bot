@@ -164,7 +164,7 @@ function scheduleBookingForToday(channelId, messageId) {
         if (courtsBooked && courtsBooked.length) {
           const list = courtsBooked.join(', ');
           if (courtsBooked.length === courts) {
-            bookedMsg = `Booked **${courts}** court(s) (${list}) for ${attendees} attendee(s).`;
+            bookedMsg = `Booked court(s) (${list})! Enjoy your nachos!`;
           } else {
             bookedMsg = `I could only get courts: ${list}. You needed ${courts} courts. Keep an eye on the booking site to see if any more courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
           }
