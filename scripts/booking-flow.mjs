@@ -38,6 +38,8 @@ export async function runBookingFlow(page, courtCount) {
   const courtsToTry = COURT_PRIORITY_ORDER;
   const dayRegex = new RegExp(`${BOOKING_DAY}.*\\d{4}`);
   let bookedCount = 0;
+  /** @type {number[]} */
+  const bookedCourts = [];
 
   while (Date.now() < deadline) {
     console.log(
@@ -179,6 +181,7 @@ export async function runBookingFlow(page, courtCount) {
         );
       }
       bookedCount++;
+      bookedCourts.push(courtNum);
       console.log(
         `[book-courts] Finished booking attempt for court ${courtNum}. bookedCount=${bookedCount}/${courtCount}`,
       );
@@ -190,6 +193,9 @@ export async function runBookingFlow(page, courtCount) {
           );
           await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         }
+        console.log(
+          `[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`,
+        );
         return;
       }
       console.log('[book-courts] Returning to start page to try next court…');
@@ -215,4 +221,5 @@ export async function runBookingFlow(page, courtCount) {
       `[book-courts] Booked ${bookedCount} court(s); no more had ${BOOKING_TIME} available.`,
     );
   }
+  console.log(`[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`);
 }

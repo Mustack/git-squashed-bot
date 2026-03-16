@@ -101,13 +101,23 @@ async function runBooking(count) {
     });
 
     let videoPath = null;
+    /** @type {number[] | null} */
+    let courtsBooked = null;
 
     child.stdout.on('data', (chunk) => {
       const text = chunk.toString();
       process.stdout.write(chunk);
-      const match = text.match(/VIDEO_PATH=(.+)\s*$/m);
-      if (match) {
-        videoPath = match[1].trim();
+      const videoMatch = text.match(/VIDEO_PATH=(.+)\s*$/m);
+      if (videoMatch) {
+        videoPath = videoMatch[1].trim();
+      }
+      const courtsMatch = text.match(/COURTS_BOOKED=([0-9,\s]+)/m);
+      if (courtsMatch) {
+        const raw = courtsMatch[1].trim();
+        courtsBooked = raw
+          .split(',')
+          .map((s) => parseInt(s.trim(), 10))
+          .filter((n) => !Number.isNaN(n));
       }
     });
 
@@ -117,7 +127,7 @@ async function runBooking(count) {
 
     child.on('close', (code) => {
       if (code !== 0) console.error(`Booking script exited with code ${code}`);
-      resolve({ ok: code === 0, videoPath });
+      resolve({ ok: code === 0, videoPath, courtsBooked: courtsBooked || [] });
     });
   });
 }
@@ -148,11 +158,20 @@ function scheduleBookingForToday(channelId, messageId) {
       const attendees = await countReactions(message); // excludes bot
       const baseCourts = Math.max(1, Math.ceil(attendees / 2)); // 1 court per 2 attendees
       const courts = DRY_RUN ? attendees * 2 + 1 : baseCourts;
-      const { ok, videoPath } = await runBooking(courts);
+      const { ok, videoPath, courtsBooked } = await runBooking(courts);
       if (ok) {
-        await channel.send(
-          `Booked **${courts}** court(s) for ${attendees} attendee(s). Check the booking site to confirm.`,
-        );
+        let bookedMsg;
+        if (courtsBooked && courtsBooked.length) {
+          const list = courtsBooked.join(', ');
+          if (courtsBooked.length === courts) {
+            bookedMsg = `Booked **${courts}** court(s) (${list}) for ${attendees} attendee(s).`;
+          } else {
+            bookedMsg = `I could only get courts: ${list}. Sorry I wasn't fast enough.`;
+          }
+        } else {
+          bookedMsg = `Booked **${courts}** court(s) for ${attendees} attendee(s). Check the booking site to confirm.`;
+        }
+        await channel.send(bookedMsg);
         if (IS_VIDEO_RECORDING_ENABLED && videoPath) {
           await channel.send({
             content: 'Here is the booking run video:',
