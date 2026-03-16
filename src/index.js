@@ -123,8 +123,8 @@ function scheduleBookingForToday(channelId, messageId) {
   const now = new Date();
   let runAt;
   if (DRY_RUN) {
-    // In DRY_RUN, always book 1 minutes from poll being sent
-    runAt = new Date(now.getTime() + 1 * 60 * 1000);
+    // In DRY_RUN, always book 5 seconds from poll being sent
+    runAt = new Date(now.getTime() + 5 * 1000);
   } else {
     const { hour, minute } = getBookingTime();
     runAt = new Date(now);
@@ -177,8 +177,8 @@ client.on('clientReady', () => {
   const pollChannelId = getPollChannelId();
   if (pollChannelId) {
     if (DRY_RUN) {
-      // In DRY_RUN, post a one-off poll 1 minute from now instead of a weekly Sunday cron
-      const runAt = new Date(Date.now() + 1 * 60 * 1000);
+      // In DRY_RUN, send poll right away
+      const runAt = new Date(Date.now());
       schedule.scheduleJob(runAt, async () => {
         console.log(`DRY_RUN: posting squash poll at ${runAt}`);
         try {
