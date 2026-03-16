@@ -164,12 +164,12 @@ function scheduleBookingForToday(channelId, messageId) {
         if (courtsBooked && courtsBooked.length) {
           const list = courtsBooked.join(', ');
           if (courtsBooked.length === courts) {
-            bookedMsg = `Booked court(s) (${list})! Enjoy your nachos!`;
+            bookedMsg = `Booked court${courtsBooked.length > 1 ? 's' : ''}: ${list}! Enjoy your nachos!`;
           } else {
-            bookedMsg = `I could only get courts: ${list}. You needed ${courts} courts. Keep an eye on the booking site to see if any more courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+            bookedMsg = `I could only get court${courtsBooked.length > 1 ? 's' : ''}: ${list}. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
           }
         } else {
-          bookedMsg = `I could not get any courts. You needed ${courts} courts. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+          bookedMsg = `I could not get any courts. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
         }
         await channel.send(bookedMsg);
         if (IS_VIDEO_RECORDING_ENABLED && videoPath) {
