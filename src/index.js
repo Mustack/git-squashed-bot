@@ -190,8 +190,6 @@ function scheduleBookingForToday(channelId, messageId) {
       bookingJob = null;
     }
   });
-
-  console.log(`Booking scheduled for ${runAt.toISOString()}`);
 }
 
 client.on('clientReady', () => {
@@ -213,9 +211,17 @@ client.on('clientReady', () => {
           console.error('DRY_RUN poll failed:', e.message);
         }
       });
-      console.log(`DRY_RUN: scheduled poll for ${runAt.toISOString()}`);
+      const rawBooking = (
+        process.env.BOOKING_TIME || DEFAULT_BOOKING_TIME
+      ).trim();
+      console.log(
+        `[config] DRY_RUN=true; test timings enabled (poll offset=50ms, booking offset=5000ms). BOOKING_TIME_RAW="${rawBooking}"`,
+      );
     } else {
       const { hour, minute } = getPollTime();
+      console.log(
+        `[config] poll cron="${cron}", POLL_TIME_RAW="${rawPoll}" BOOKING_TIME_RAW="${rawBooking}"`,
+      );
       const cron = `0 ${minute} ${hour} * * 0`; // Sunday
       schedule.scheduleJob(cron, async () => {
         console.log(
@@ -241,10 +247,15 @@ client.on('clientReady', () => {
           }
         }
       });
+      const rawPoll = (process.env.POLL_TIME || DEFAULT_POLL_TIME).trim();
       console.log(
-        `Scheduled weekly poll for Sundays at ${formatTime({ hour, minute })}`,
+        `[config] DRY_RUN=false; poll cron="${cron}", POLL_TIME_RAW="${rawPoll}"`,
       );
     }
+  } else {
+    console.log(
+      'No DISCORD_POLL_CHANNEL_ID set; no weekly poll is currently scheduled.',
+    );
   }
 });
 
