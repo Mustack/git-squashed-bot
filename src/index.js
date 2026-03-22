@@ -2,13 +2,14 @@ import 'dotenv/config';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import schedule from 'node-schedule';
 import { parseTime, formatTime } from './utils/parseTime.js';
+import { EASTERN_TZ, nextEasternWallTime } from './utils/easternTime.js';
 
 const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
 
-/** Default time to post the weekly poll on Sundays (e.g. "12:35pm"). Override with POLL_TIME env. */
+/** Default time to post the weekly poll on Sundays (e.g. "12:35pm"). Eastern Time; override with POLL_TIME env. */
 const DEFAULT_POLL_TIME = '9:00am';
-/** Default time to run the booking script the same day (e.g. "12:45pm"). Override with BOOKING_TIME env. */
+/** Default time to run the booking script the same day (e.g. "12:45pm"). Eastern Time; override with BOOKING_TIME env. */
 const DEFAULT_BOOKING_TIME = '6:00pm';
 
 /** When true, speed up timings for local testing (poll 1 min from start, booking 2 min from start). */
@@ -133,18 +134,13 @@ async function runBooking(count) {
 }
 
 function scheduleBookingForToday(channelId, messageId) {
-  const now = new Date();
   let runAt;
   if (DRY_RUN) {
     // In DRY_RUN, always book 5 seconds from poll being sent
-    runAt = new Date(now.getTime() + 5 * 1000);
+    runAt = new Date(Date.now() + 5 * 1000);
   } else {
     const { hour, minute } = getBookingTime();
-    runAt = new Date(now);
-    runAt.setHours(hour, minute, 0, 0);
-    if (runAt <= now) {
-      runAt.setDate(runAt.getDate() + 1);
-    }
+    runAt = nextEasternWallTime(hour, minute);
   }
 
   if (bookingJob) bookingJob.cancel();
@@ -219,10 +215,15 @@ client.on('clientReady', () => {
       );
     } else {
       const { hour, minute } = getPollTime();
-      const cron = `0 ${minute} ${hour} * * 0`; // Sunday
-      schedule.scheduleJob(cron, async () => {
+      const pollRule = new schedule.RecurrenceRule();
+      pollRule.dayOfWeek = 0; // Sunday
+      pollRule.hour = hour;
+      pollRule.minute = minute;
+      pollRule.second = 0;
+      pollRule.tz = EASTERN_TZ;
+      schedule.scheduleJob(pollRule, async () => {
         console.log(
-          `Sunday ${formatTime({ hour, minute })}: posting squash poll`,
+          `Sunday ${formatTime({ hour, minute })} ${EASTERN_TZ}: posting squash poll`,
         );
         try {
           const channel = await client.channels.fetch(pollChannelId);
@@ -249,7 +250,7 @@ client.on('clientReady', () => {
         process.env.BOOKING_TIME || DEFAULT_BOOKING_TIME
       ).trim();
       console.log(
-        `[config] DRY_RUN=false; poll cron="${cron}", POLL_TIME_RAW="${rawPoll}", BOOKING_TIME_RAW="${rawBooking}"`,
+        `[config] DRY_RUN=false; poll schedule=Sun ${hour}:${String(minute).padStart(2, '0')} ${EASTERN_TZ}, POLL_TIME_RAW="${rawPoll}", BOOKING_TIME_RAW="${rawBooking}"`,
       );
     }
   } else {
@@ -276,7 +277,7 @@ client.on('messageCreate', async (message) => {
     await message.channel.send(
       `Poll posted. React with ${REACTION_EMOJI} if you're in. Booking will run at **${formatTime(
         getBookingTime(),
-      )}** today.`,
+      )} US Eastern** today.`,
     );
   }
 });
