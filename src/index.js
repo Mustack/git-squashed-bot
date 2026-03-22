@@ -8,7 +8,7 @@ const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
 
 /** Default time to post the weekly poll on Sundays (e.g. "12:35pm"). Eastern Time; override with POLL_TIME env. */
-const DEFAULT_POLL_TIME = '9:00am';
+const DEFAULT_POLL_TIME = '1:45pm';
 /** Default time to run the booking script the same day (e.g. "12:45pm"). Eastern Time; override with BOOKING_TIME env. */
 const DEFAULT_BOOKING_TIME = '6:00pm';
 
