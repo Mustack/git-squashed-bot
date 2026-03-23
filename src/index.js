@@ -70,11 +70,20 @@ function getPollTime() {
   }
 }
 
+/** Unicode poll reaction only (not custom emoji). */
+function matchesPollEmoji(reaction) {
+  const e = reaction.emoji;
+  if (e.id) return false;
+  return e.name === REACTION_EMOJI;
+}
+
+function isPollMessage(message) {
+  return message.content === POLL_TEXT;
+}
+
 async function countReactions(message) {
   try {
-    const reaction = message.reactions.cache.find(
-      (r) => r.emoji.name === REACTION_EMOJI,
-    );
+    const reaction = message.reactions.cache.find((r) => matchesPollEmoji(r));
     if (!reaction) return 0;
     await reaction.users.fetch();
     const users = reaction.users.cache.filter((u) => !u.bot);
@@ -187,6 +196,68 @@ function scheduleBookingForToday(channelId, messageId) {
     }
   });
 }
+
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+  try {
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch {
+        return;
+      }
+    }
+    if (!matchesPollEmoji(reaction)) return;
+
+    const message = reaction.message.partial
+      ? await reaction.message.fetch()
+      : reaction.message;
+    if (!isPollMessage(message)) return;
+
+    await reaction.users.fetch();
+    if (reaction.users.cache.has(client.user.id)) {
+      await reaction.users.remove(client.user);
+    }
+  } catch (e) {
+    console.error('messageReactionAdd (poll emoji):', e);
+  }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (user.bot) return;
+  try {
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch {
+        return;
+      }
+    }
+    if (!matchesPollEmoji(reaction)) return;
+
+    const message = reaction.message.partial
+      ? await reaction.message.fetch()
+      : reaction.message;
+    if (!isPollMessage(message)) return;
+
+    const fresh = await message.channel.messages.fetch(message.id);
+    const r = fresh.reactions.cache.find((x) => matchesPollEmoji(x));
+    if (r && r.count > 0) return;
+    await fresh.react(REACTION_EMOJI);
+  } catch (e) {
+    console.error('messageReactionRemove (poll emoji):', e);
+  }
+});
+
+client.on('messageReactionRemoveAll', async (message) => {
+  try {
+    if (message.partial) await message.fetch();
+    if (!isPollMessage(message)) return;
+    await message.react(REACTION_EMOJI);
+  } catch (e) {
+    console.error('messageReactionRemoveAll (poll):', e);
+  }
+});
 
 client.on('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
