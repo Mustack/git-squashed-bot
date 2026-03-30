@@ -36,7 +36,7 @@ const DAY_RETRY_WAIT_MS = 3000;
  */
 export async function runBookingFlow(page, courtCount) {
   const deadline = Date.now() + DAY_RETRY_DEADLINE_MS;
-  const courtsToTry = COURT_PRIORITY_ORDER;
+  const courtsToTry = [...COURT_PRIORITY_ORDER];
   const dayRegex = new RegExp(`${BOOKING_DAY}.*\\d{4}`);
   let bookedCount = 0;
   /** @type {number[]} */
@@ -51,8 +51,10 @@ export async function runBookingFlow(page, courtCount) {
 
     let dayNotVisible = false;
 
-    for (const courtNum of courtsToTry) {
+    let courtIdx = 0;
+    while (courtIdx < courtsToTry.length) {
       if (bookedCount >= courtCount) break;
+      const courtNum = courtsToTry[courtIdx];
       const courtLabel = `Squash - court ${courtNum}`;
       const courtLink = page.getByRole('link', { name: courtLabel });
 
@@ -112,6 +114,7 @@ export async function runBookingFlow(page, courtCount) {
           `[book-courts] No <a> with aria-label matching ${timeLabelRegex} found for court ${courtNum}; trying next court.`,
         );
         await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+        courtIdx++;
         continue;
       }
       const isUnavailable = await timeSlot
@@ -129,6 +132,7 @@ export async function runBookingFlow(page, courtCount) {
           `[book-courts] Court ${courtNum}: ${BOOKING_TIME} is taken, trying next court.`,
         );
         await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+        courtIdx++;
         continue;
       }
       console.log(
@@ -177,6 +181,18 @@ export async function runBookingFlow(page, courtCount) {
       }
       bookedCount++;
       bookedCourts.push(courtNum);
+
+      if (bookedCount === 1) {
+        const i2 = courtsToTry.indexOf(2);
+        if (i2 !== -1) {
+          courtsToTry.splice(i2, 1);
+          courtsToTry.push(2);
+          console.log(
+            `[book-courts] First court booked; moved court 2 to end: [${courtsToTry.join(', ')}]`,
+          );
+        }
+      }
+
       console.log(
         `[book-courts] Finished booking attempt for court ${courtNum}. bookedCount=${bookedCount}/${courtCount}`,
       );
@@ -193,6 +209,7 @@ export async function runBookingFlow(page, courtCount) {
       }
       console.log('[book-courts] Returning to start page to try next court…');
       await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+      courtIdx++;
     }
 
     // Exited court loop: if day wasn't visible we retry the while; otherwise we tried all courts
