@@ -8,7 +8,7 @@ const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
 
 /** Default time to post the weekly poll on Sundays (e.g. "12:35pm"). Eastern Time; override with POLL_TIME env. */
-const DEFAULT_POLL_TIME = '1:45pm';
+const DEFAULT_POLL_TIME = '9:00am';
 /** Default time to run the booking script the same day (e.g. "12:45pm"). Eastern Time; override with BOOKING_TIME env. */
 const DEFAULT_BOOKING_TIME = '6:00pm';
 
@@ -161,7 +161,8 @@ function scheduleBookingForToday(channelId, messageId) {
       const channel = await client.channels.fetch(channelId);
       const message = await channel.messages.fetch(messageId);
       const attendees = await countReactions(message); // excludes bot
-      const baseCourts = Math.max(1, Math.ceil(attendees / 2)); // 1 court per 2 attendees
+      // Pairs per court: floor(attendees/2), min 1 court (e.g. 5 → 2, 4 → 2, 6 → 3)
+      const baseCourts = Math.max(1, Math.floor(attendees / 2));
       const courts = DRY_RUN ? attendees * 2 + 1 : baseCourts;
       const { ok, videoPath, courtsBooked } = await runBooking(courts);
       if (ok) {
