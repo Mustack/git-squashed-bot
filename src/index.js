@@ -162,8 +162,14 @@ function scheduleBookingForToday(channelId, messageId) {
       const message = await channel.messages.fetch(messageId);
       const attendees = await countReactions(message); // excludes bot
       // Pairs per court: floor(attendees/2), min 1 court (e.g. 5 → 2, 4 → 2, 6 → 3)
-      const baseCourts = Math.max(1, Math.floor(attendees / 2));
+      const baseCourts = Math.floor(attendees / 2);
       const courts = DRY_RUN ? attendees * 2 + 1 : baseCourts;
+
+      if (courts < 1) {
+        await channel.send('Not enough attendees to book courts');
+        return;
+      }
+
       const { ok, videoPath, courtsBooked } = await runBooking(courts);
       if (ok) {
         let bookedMsg;
