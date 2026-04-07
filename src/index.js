@@ -14,10 +14,6 @@ const DEFAULT_BOOKING_TIME = '6:00pm';
 
 /** When true, speed up timings for local testing (poll 1 min from start, booking 2 min from start). */
 const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
-/** When true, record and upload Playwright booking videos. */
-const IS_VIDEO_RECORDING_ENABLED =
-  String(process.env.IS_VIDEO_RECORDING_ENABLED || '').toLowerCase() === 'true';
-
 /** @type {{ messageId: string, channelId: string } | null} */
 let scheduledPoll = null;
 
@@ -55,6 +51,11 @@ function getBookingTime() {
 /** Channel ID where the weekly poll is posted (required for Sunday auto-post). */
 function getPollChannelId() {
   return (process.env.DISCORD_POLL_CHANNEL_ID || '').trim();
+}
+
+/** When set, Playwright records a run video and the bot posts it here. Unset = no recording. */
+function getVideoChannelId() {
+  return (process.env.DISCORD_VIDEO_CHANNEL_ID || '').trim();
 }
 
 /** Poll time from env. Uses DEFAULT_POLL_TIME if unset. */
@@ -184,8 +185,18 @@ function scheduleBookingForToday(channelId, messageId) {
           bookedMsg = `I could not get any courts. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
         }
         await channel.send(bookedMsg);
-        if (IS_VIDEO_RECORDING_ENABLED && videoPath) {
-          await channel.send({
+        const videoChannelId = getVideoChannelId();
+        if (videoChannelId && videoPath) {
+          let videoChannel = channel;
+          try {
+            videoChannel = await client.channels.fetch(videoChannelId);
+          } catch (e) {
+            console.error(
+              `DISCORD_VIDEO_CHANNEL_ID: could not fetch channel, using booking channel:`,
+              e.message,
+            );
+          }
+          await videoChannel.send({
             content: 'Here is the booking run video:',
             files: [videoPath],
           });
