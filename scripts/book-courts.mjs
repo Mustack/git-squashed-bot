@@ -31,17 +31,20 @@ async function main() {
   page.setDefaultTimeout(10_000);
   page.setDefaultNavigationTimeout(30_000);
 
+  const recordedVideo = RECORD_BOOKING_VIDEO ? page.video() : null;
+
   try {
     await runBookingFlow(page, COURT_COUNT);
-    if (RECORD_BOOKING_VIDEO) {
-      const video = await page.video();
-      if (video) {
-        const videoPath = await video.path();
-        console.log(`[book-courts] VIDEO_PATH=${videoPath}`);
-      }
-    }
   } finally {
     await browser.close();
+    if (recordedVideo) {
+      try {
+        const videoPath = await recordedVideo.path();
+        console.log(`[book-courts] VIDEO_PATH=${videoPath}`);
+      } catch (e) {
+        console.error('[book-courts] could not finalize run video:', e);
+      }
+    }
   }
 }
 

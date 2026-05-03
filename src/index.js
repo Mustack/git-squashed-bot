@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'node:fs/promises';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import schedule from 'node-schedule';
 import { parseTime, formatTime } from './utils/parseTime.js';
@@ -53,7 +54,7 @@ function getPollChannelId() {
   return (process.env.DISCORD_POLL_CHANNEL_ID || '').trim();
 }
 
-/** When set, Playwright records a run video and the bot posts it here. Unset = no recording. */
+/** When set, Playwright records runs; on booking failure the bot may post the video here. Unset = no recording. */
 function getVideoChannelId() {
   return (process.env.DISCORD_VIDEO_CHANNEL_ID || '').trim();
 }
@@ -98,7 +99,7 @@ async function countReactions(message) {
 
 /**
  * Runs the booking script.
- * Returns an object { ok: boolean, videoPath: string | null }.
+ * Returns an object { ok: boolean, videoPath: string | null } when DISCORD_VIDEO_CHANNEL_ID is set (recording).
  */
 async function runBooking(count) {
   const { spawn } = await import('child_process');
@@ -143,6 +144,15 @@ async function runBooking(count) {
   });
 }
 
+async function deleteBookingVideoFile(videoPath) {
+  if (!videoPath) return;
+  try {
+    await fs.unlink(videoPath);
+  } catch (e) {
+    console.warn(`Could not delete booking video ${videoPath}:`, e.message);
+  }
+}
+
 function scheduleBookingForToday(channelId, messageId) {
   let runAt;
   if (DRY_RUN) {
@@ -172,39 +182,47 @@ function scheduleBookingForToday(channelId, messageId) {
       }
 
       const { ok, videoPath, courtsBooked } = await runBooking(courts);
-      if (ok) {
-        let bookedMsg;
-        if (courtsBooked && courtsBooked.length) {
-          const list = courtsBooked.join(', ');
-          if (courtsBooked.length === courts) {
-            bookedMsg = `Booked court${courtsBooked.length > 1 ? 's' : ''}: ${list}! Enjoy your nachos!`;
+      try {
+        if (ok) {
+          let bookedMsg;
+          if (courtsBooked && courtsBooked.length) {
+            const list = courtsBooked.join(', ');
+            if (courtsBooked.length === courts) {
+              bookedMsg = `Booked court${courtsBooked.length > 1 ? 's' : ''}: ${list}! Enjoy your nachos!`;
+            } else {
+              bookedMsg = `I could only get court${courtsBooked.length > 1 ? 's' : ''}: ${list}. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+            }
           } else {
-            bookedMsg = `I could only get court${courtsBooked.length > 1 ? 's' : ''}: ${list}. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+            bookedMsg = `I could not get any courts. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
           }
+          await channel.send(bookedMsg);
         } else {
-          bookedMsg = `I could not get any courts. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
-        }
-        await channel.send(bookedMsg);
-        const videoChannelId = getVideoChannelId();
-        if (videoChannelId && videoPath) {
-          let videoChannel = channel;
-          try {
-            videoChannel = await client.channels.fetch(videoChannelId);
-          } catch (e) {
-            console.error(
-              `DISCORD_VIDEO_CHANNEL_ID: could not fetch channel, using booking channel:`,
-              e.message,
-            );
+          await channel.send(
+            `⚠️ The booking script failed for **${courts}** court(s). Check the server logs and try booking manually.`,
+          );
+          const videoChannelId = getVideoChannelId();
+          if (videoChannelId && videoPath) {
+            let videoChannel = channel;
+            try {
+              videoChannel = await client.channels.fetch(videoChannelId);
+            } catch (e) {
+              console.error(
+                `DISCORD_VIDEO_CHANNEL_ID: could not fetch channel, using booking channel:`,
+                e.message,
+              );
+            }
+            try {
+              await videoChannel.send({
+                content: 'Recording from the failed booking run:',
+                files: [videoPath],
+              });
+            } catch (e) {
+              console.error('Failed to upload booking failure video:', e);
+            }
           }
-          await videoChannel.send({
-            content: 'Here is the booking run video:',
-            files: [videoPath],
-          });
         }
-      } else {
-        await channel.send(
-          `⚠️ The booking script failed for **${courts}** court(s). Check the server logs and try booking manually.`,
-        );
+      } finally {
+        await deleteBookingVideoFile(videoPath);
       }
     } catch (e) {
       console.error('Booking job failed:', e);
