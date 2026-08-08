@@ -115,6 +115,7 @@ async function runBooking(count) {
     let videoPath = null;
     /** @type {number[] | null} */
     let courtsBooked = null;
+    let dayUnavailable = false;
 
     child.stdout.on('data', (chunk) => {
       const text = chunk.toString();
@@ -122,6 +123,9 @@ async function runBooking(count) {
       const videoMatch = text.match(/VIDEO_PATH=(.+)\s*$/m);
       if (videoMatch) {
         videoPath = videoMatch[1].trim();
+      }
+      if (/DAY_UNAVAILABLE=1/.test(text)) {
+        dayUnavailable = true;
       }
       const courtsMatch = text.match(/COURTS_BOOKED=([0-9,\s]+)/m);
       if (courtsMatch) {
@@ -139,7 +143,12 @@ async function runBooking(count) {
 
     child.on('close', (code) => {
       if (code !== 0) console.error(`Booking script exited with code ${code}`);
-      resolve({ ok: code === 0, videoPath, courtsBooked: courtsBooked || [] });
+      resolve({
+        ok: code === 0,
+        videoPath,
+        courtsBooked: courtsBooked || [],
+        dayUnavailable,
+      });
     });
   });
 }
@@ -181,11 +190,16 @@ function scheduleBookingForToday(channelId, messageId) {
         return;
       }
 
-      const { ok, videoPath, courtsBooked } = await runBooking(courts);
+      const { ok, videoPath, courtsBooked, dayUnavailable } =
+        await runBooking(courts);
       try {
         if (ok) {
           let bookedMsg;
-          if (courtsBooked && courtsBooked.length) {
+          if (dayUnavailable) {
+            const bookingDay =
+              (process.env.BOOKING_DAY || 'Tuesday').trim() || 'Tuesday';
+            bookedMsg = `${bookingDay} never showed up on the booking site after an hour of checking. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+          } else if (courtsBooked && courtsBooked.length) {
             const list = courtsBooked.join(', ');
             if (courtsBooked.length === courts) {
               bookedMsg = `Booked court${courtsBooked.length > 1 ? 's' : ''}: ${list}! Enjoy your nachos!`;
@@ -200,8 +214,12 @@ function scheduleBookingForToday(channelId, messageId) {
           await channel.send(
             `⚠️ The booking script failed for **${courts}** court(s). Check the server logs and try booking manually.`,
           );
+        }
+
+        const shouldSendVideo = (!ok || dayUnavailable) && videoPath;
+        if (shouldSendVideo) {
           const videoChannelId = getVideoChannelId();
-          if (videoChannelId && videoPath) {
+          if (videoChannelId) {
             let videoChannel = channel;
             try {
               videoChannel = await client.channels.fetch(videoChannelId);
@@ -213,11 +231,13 @@ function scheduleBookingForToday(channelId, messageId) {
             }
             try {
               await videoChannel.send({
-                content: 'Recording from the failed booking run:',
+                content: dayUnavailable
+                  ? 'Recording from the booking run (day never appeared):'
+                  : 'Recording from the failed booking run:',
                 files: [videoPath],
               });
             } catch (e) {
-              console.error('Failed to upload booking failure video:', e);
+              console.error('Failed to upload booking video:', e);
             }
           }
         }

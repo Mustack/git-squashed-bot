@@ -23,16 +23,17 @@ const DRY_RUN_CLICK_DELAY_MS =
   Number(process.env.DRY_RUN_CLICK_DELAY || '2000') || 0;
 
 /** How long to keep retrying when the day isn't available yet (ms). */
-const DAY_RETRY_DEADLINE_MS = 5 * 60 * 1000;
+const DAY_RETRY_DEADLINE_MS = 60 * 60 * 1000;
 
 /** Wait and refresh when the day link is missing (ms). */
 const DAY_RETRY_WAIT_MS = 3000;
 
 /**
  * Runs the booking flow on the given page. Tries to book up to courtCount courts in priority order.
- * If the day of the week isn't on the page yet, waits 3s, refreshes, and retries for up to 5 minutes.
+ * If the day of the week isn't on the page yet, waits 3s, refreshes, and retries for up to 1 hour.
  * @param {import('playwright').Page} page - Playwright page (from script or test)
  * @param {number} courtCount - Number of courts to book. Courts are tried in COURT_PRIORITY_ORDER; after each successful booking, continues to the next until courtCount is reached.
+ * @returns {Promise<{ dayUnavailable: boolean }>}
  */
 export async function runBookingFlow(page, courtCount) {
   const deadline = Date.now() + DAY_RETRY_DEADLINE_MS;
@@ -41,6 +42,7 @@ export async function runBookingFlow(page, courtCount) {
   let bookedCount = 0;
   /** @type {number[]} */
   const bookedCourts = [];
+  let dayUnavailable = false;
 
   while (Date.now() < deadline) {
     console.log(
@@ -205,7 +207,7 @@ export async function runBookingFlow(page, courtCount) {
           await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         }
         console.log(`[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`);
-        return;
+        return { dayUnavailable: false };
       }
       console.log('[book-courts] Returning to start page to try next court…');
       await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
@@ -219,9 +221,11 @@ export async function runBookingFlow(page, courtCount) {
   }
 
   if (Date.now() >= deadline) {
+    dayUnavailable = true;
     console.log(
-      `[book-courts] ${BOOKING_DAY} did not appear within 5 minutes; reservations may not be open yet.`,
+      `[book-courts] ${BOOKING_DAY} did not appear within 1 hour; reservations may not be open yet.`,
     );
+    console.log('[book-courts] DAY_UNAVAILABLE=1');
   } else if (bookedCount === 0) {
     console.log(
       `[book-courts] No court had ${BOOKING_TIME} available in priority order.`,
@@ -232,4 +236,5 @@ export async function runBookingFlow(page, courtCount) {
     );
   }
   console.log(`[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`);
+  return { dayUnavailable };
 }
