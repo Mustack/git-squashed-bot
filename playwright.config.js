@@ -1,6 +1,11 @@
 // @ts-check
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from 'playwright/test';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(rootDir, '.env') });
 
 export default defineConfig({
   testDir: 'tests',
