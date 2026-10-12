@@ -16,7 +16,7 @@ export const BOOKING_URL =
   'https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie';
 
 /** Court numbers to try in order (squash courts at Bob MacQuarrie). */
-const COURT_PRIORITY_ORDER = [1, 2, 3, 5, 7, 9];
+export const COURT_PRIORITY_ORDER = [1, 2, 3, 5, 7, 9];
 
 /** Day of week to book (e.g. "Tuesday"). Override with BOOKING_DAY in .env. Also used by the bot's messages. */
 export const BOOKING_DAY =
@@ -42,7 +42,8 @@ const DAY_RETRY_WAIT_MS = 3000;
 
 /**
  * Runs the booking flow on the given page. Tries to book up to courtCount courts in priority order.
- * If the day of the week isn't on the page yet, waits 3s, refreshes, and retries for up to 1 hour.
+ * The site hides a day on a court once that court is fully booked for it, so a court missing the day is skipped.
+ * If no court lists the day yet, waits 3s, refreshes, and retries for up to 1 hour.
  * @param {import('playwright').Page} page - Playwright page (from script or test)
  * @param {number} courtCount - Number of courts to book. Courts are tried in COURT_PRIORITY_ORDER; after each successful booking, continues to the next until courtCount is reached.
  * @param {{ freshPage?: () => Promise<import('playwright').Page> }} [options] - freshPage, if given, is called before each retry and the returned page is used instead (e.g. so a recording only covers the last attempt).
@@ -68,7 +69,7 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
     await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
     console.log(`[book-courts] Landed on booking URL: ${BOOKING_URL}`);
 
-    dayNotVisible = false;
+    let dayFoundThisPass = false;
 
     let courtIdx = 0;
     while (courtIdx < courtsToTry.length) {
@@ -98,14 +99,15 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
           .allTextContents()
           .catch(() => []);
         console.log(
-          `[book-courts] ${BOOKING_DAY} not yet available (site shows: ${
+          `[book-courts] ${BOOKING_DAY} not listed for court ${courtNum} (site shows: ${
             shownDates.map((d) => d.trim()).join('; ') || 'no dates'
-          }), waiting ${DAY_RETRY_WAIT_MS / 1000}s and retrying...`
+          }); trying next court.`
         );
-        await page.waitForTimeout(DAY_RETRY_WAIT_MS);
-        dayNotVisible = true;
-        break;
+        await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+        courtIdx++;
+        continue;
       }
+      dayFoundThisPass = true;
 
       console.log(
         `[book-courts] Found ${BOOKING_DAY} date button, clicking it…`
@@ -175,8 +177,15 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
       await page.waitForLoadState('networkidle');
 
       if (DRY_RUN) {
+        // Stop at the contact form: reaching it is a successful dry run.
+        await page.getByLabel(/phone number/i).waitFor();
+        const slotHeading = await page
+          .getByRole('heading', { name: /^Time:/ })
+          .first()
+          .innerText()
+          .catch(() => '');
         console.log(
-          `[book-courts] DRY_RUN=true: would book Squash - court ${courtNum} at ${BOOKING_SLOT} (skipping contact details and confirmation).`
+          `[book-courts] DRY_RUN=true: reached contact form for Squash - court ${courtNum} (${slotHeading.trim()}); not submitting.`
         );
       } else {
         console.log('[book-courts] Filling contact form with env values…');
@@ -243,10 +252,17 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
       courtIdx++;
     }
 
-    // Exited court loop: if day wasn't visible we retry the while; otherwise we tried all courts
+    // Exited court loop: if no court listed the day we retry the while; otherwise we tried all courts
+    dayNotVisible = !dayFoundThisPass;
     if (!dayNotVisible) {
       break;
     }
+    console.log(
+      `[book-courts] ${BOOKING_DAY} not listed on any court yet, waiting ${
+        DAY_RETRY_WAIT_MS / 1000
+      }s and retrying...`
+    );
+    await page.waitForTimeout(DAY_RETRY_WAIT_MS);
   }
 
   const dayUnavailable = dayNotVisible;
