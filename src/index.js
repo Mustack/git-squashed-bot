@@ -4,6 +4,7 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import schedule from 'node-schedule';
 import { parseTime, formatTime } from './utils/parseTime.js';
 import { EASTERN_TZ, nextEasternWallTime } from './utils/easternTime.js';
+import { BOOKING_DAY, BOOKING_URL } from '../scripts/booking-flow.mjs';
 
 const REACTION_EMOJI = '✋';
 const POLL_TEXT = "Who's in for squash this week? React below 👇";
@@ -196,18 +197,16 @@ function scheduleBookingForToday(channelId, messageId) {
         if (ok) {
           let bookedMsg;
           if (dayUnavailable) {
-            const bookingDay =
-              (process.env.BOOKING_DAY || 'Tuesday').trim() || 'Tuesday';
-            bookedMsg = `${bookingDay} never showed up on the booking site after an hour of checking. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+            bookedMsg = `${BOOKING_DAY} never showed up on the booking site after an hour of checking. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site: ${BOOKING_URL}`;
           } else if (courtsBooked && courtsBooked.length) {
             const list = courtsBooked.join(', ');
             if (courtsBooked.length === courts) {
               bookedMsg = `Booked court${courtsBooked.length > 1 ? 's' : ''}: ${list}! Enjoy your nachos!`;
             } else {
-              bookedMsg = `I could only get court${courtsBooked.length > 1 ? 's' : ''}: ${list}. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+              bookedMsg = `I could only get court${courtsBooked.length > 1 ? 's' : ''}: ${list}. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: ${BOOKING_URL}`;
             }
           } else {
-            bookedMsg = `I could not get any courts. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie`;
+            bookedMsg = `I could not get any courts. You needed ${courts} court${courts > 1 ? 's' : ''}. Keep an eye on the booking site to see if any courts become available: ${BOOKING_URL}`;
           }
           await channel.send(bookedMsg);
         } else {
@@ -216,8 +215,14 @@ function scheduleBookingForToday(channelId, messageId) {
           );
         }
 
-        const shouldSendVideo = (!ok || dayUnavailable) && videoPath;
-        if (shouldSendVideo) {
+        const shouldSendVideo =
+          !ok || dayUnavailable || courtsBooked.length < courts;
+        if (shouldSendVideo && !videoPath) {
+          console.warn(
+            'Booking did not fully succeed but there is no recording to post (is DISCORD_VIDEO_CHANNEL_ID set?).',
+          );
+        }
+        if (shouldSendVideo && videoPath) {
           const videoChannelId = getVideoChannelId();
           if (videoChannelId) {
             let videoChannel = channel;
@@ -231,9 +236,11 @@ function scheduleBookingForToday(channelId, messageId) {
             }
             try {
               await videoChannel.send({
-                content: dayUnavailable
-                  ? 'Recording from the booking run (day never appeared):'
-                  : 'Recording from the failed booking run:',
+                content: !ok
+                  ? 'Recording from the failed booking run:'
+                  : dayUnavailable
+                    ? `Recording of the last attempt (${BOOKING_DAY} never appeared):`
+                    : `Recording from the booking run (got ${courtsBooked.length}/${courts} court${courts > 1 ? 's' : ''}):`,
                 files: [videoPath],
               });
             } catch (e) {
