@@ -78,12 +78,32 @@ export async function runBookingFlow(page, courtCount) {
       // Date headers are <button class="title"> with .header-text like
       // "Monday August 24ᵗʰ, 2026". A regex on getByRole name does not match
       // that full accessible name; match the visible header text instead.
+      // isVisible() doesn't wait, so first give the date headers time to render,
+      // then match on the button's own text (case-insensitive) rather than a nested element.
+      await page
+        .locator('button.title')
+        .first()
+        .waitFor({ state: 'attached', timeout: 5000 })
+        .catch(() => {});
+      const dayRegex = new RegExp(`\\b${dayEscaped}\\b`, 'i');
       const dayOption = page
         .locator('button.title')
-        .filter({ has: page.locator('.header-text', { hasText: BOOKING_DAY }) })
+        .filter({ hasText: dayRegex })
         .first();
-      const dayVisible = await dayOption.isVisible().catch(() => false);
+      const dayVisible = await dayOption
+        .waitFor({ state: 'visible', timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
       if (!dayVisible) {
+        const headers = await page
+          .locator('button.title')
+          .allInnerTexts()
+          .catch(() => []);
+        console.log(
+          `[book-courts] Day headers seen: ${JSON.stringify(
+            headers.map((h) => h.trim())
+          )}`
+        );
         console.log(
           `[book-courts] ${BOOKING_DAY} not yet available, waiting ${
             DAY_RETRY_WAIT_MS / 1000
