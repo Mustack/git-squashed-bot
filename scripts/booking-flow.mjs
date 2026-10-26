@@ -85,19 +85,19 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
       }
       await page.waitForLoadState('networkidle');
 
-      // Date headers are <button class="title"> with .header-text like
+      // Date headers are <summary class="title"> (expandable) with .header-text like
       // "Monday August 24ᵗʰ, 2026". A regex on getByRole name does not match
       // that full accessible name; match the visible header text instead.
       // isVisible() doesn't wait, so first give the date headers time to render,
       // then match on the button's own text (case-insensitive) rather than a nested element.
       await page
-        .locator('button.title')
+        .locator('.title')
         .first()
         .waitFor({ state: 'attached', timeout: 5000 })
         .catch(() => {});
       const dayRegex = new RegExp(`\\b${dayEscaped}\\b`, 'i');
       const dayOption = page
-        .locator('button.title')
+        .locator('summary.title')
         .filter({ hasText: dayRegex })
         .first();
       const dayVisible = await dayOption
@@ -106,7 +106,7 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
         .catch(() => false);
       if (!dayVisible) {
         const shownDates = await page
-          .locator('button.title .header-text')
+          .locator('.title .header-text')
           .allTextContents()
           .catch(() => []);
         console.log(

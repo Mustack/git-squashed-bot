@@ -55,7 +55,7 @@ async function openCourt(page, courtNum) {
 
 async function listedDates(page) {
   await openCourt(page, COURT_PRIORITY_ORDER[0]);
-  const dates = await page.locator('button.title .header-text').allTextContents();
+  const dates = await page.locator('.title .header-text').allTextContents();
   return dates.map((d) => d.trim());
 }
 
@@ -65,7 +65,7 @@ async function scanAvailability(page, dayName) {
   for (const courtNum of COURT_PRIORITY_ORDER) {
     await openCourt(page, courtNum);
     const day = page
-      .locator('button.title')
+      .locator('summary.title')
       .filter({ has: page.locator('.header-text', { hasText: dayName }) })
       .first();
     if (!(await day.isVisible().catch(() => false))) {
