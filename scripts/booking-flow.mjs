@@ -11,18 +11,22 @@ dotenv.config({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env'),
 });
 
-const BOOKING_URL =
+export const BOOKING_URL =
   process.env.BOOKING_URL ||
   'https://reservation.frontdesksuite.ca/rcfs/bobmacquarrie';
 
 /** Court numbers to try in order (squash courts at Bob MacQuarrie). */
-const COURT_PRIORITY_ORDER = [1, 2, 3, 5, 7, 9];
+export const COURT_PRIORITY_ORDER = [1, 2, 3, 5, 7, 9];
 
-/** Day of week to book (e.g. "Monday"). Override with BOOKING_DAY in .env. */
-const BOOKING_DAY = (process.env.BOOKING_DAY || 'Monday').trim() || 'Monday';
+/** Day of week to book (e.g. "Tuesday"). Override with BOOKING_DAY in .env. Also used by the bot's messages. */
+export const BOOKING_DAY =
+  (process.env.BOOKING_DAY || 'Tuesday').trim() || 'Tuesday';
 
-/** Time slot label to click (e.g. "8:00 p.m."). Override with BOOKING_TIME in .env. */
-const BOOKING_TIME = process.env.BOOKING_TIME || '8:00 p.m.';
+/**
+ * Time slot label to click (e.g. "8:00 p.m."). Override with BOOKING_SLOT in .env.
+ * (Not BOOKING_TIME: the bot uses that for when to run the booking.)
+ */
+const BOOKING_SLOT = process.env.BOOKING_SLOT || '8:00 p.m.';
 
 /** When true, don't submit the form; just navigate as if booking succeeded. */
 const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
@@ -38,28 +42,34 @@ const DAY_RETRY_WAIT_MS = 3000;
 
 /**
  * Runs the booking flow on the given page. Tries to book up to courtCount courts in priority order.
- * If the day of the week isn't on the page yet, waits 3s, refreshes, and retries for up to 1 hour.
+ * The site hides a day on a court once that court is fully booked for it, so a court missing the day is skipped.
+ * If no court lists the day yet, waits 3s, refreshes, and retries for up to 1 hour.
  * @param {import('playwright').Page} page - Playwright page (from script or test)
  * @param {number} courtCount - Number of courts to book. Courts are tried in COURT_PRIORITY_ORDER; after each successful booking, continues to the next until courtCount is reached.
+ * @param {{ freshPage?: () => Promise<import('playwright').Page> }} [options] - freshPage, if given, is called before each retry and the returned page is used instead (e.g. so a recording only covers the last attempt).
  * @returns {Promise<{ dayUnavailable: boolean }>}
  */
-export async function runBookingFlow(page, courtCount) {
+export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
   const deadline = Date.now() + DAY_RETRY_DEADLINE_MS;
   const courtsToTry = [...COURT_PRIORITY_ORDER];
   const dayEscaped = BOOKING_DAY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   let bookedCount = 0;
   /** @type {number[]} */
   const bookedCourts = [];
-  let dayUnavailable = false;
+  let dayNotVisible = false;
+  let attempt = 0;
 
   while (Date.now() < deadline) {
+    if (attempt++ > 0 && freshPage) {
+      page = await freshPage();
+    }
     console.log(
-      `[book-courts] Starting booking loop. BOOKING_DAY=${BOOKING_DAY}, BOOKING_TIME=${BOOKING_TIME}, DRY_RUN=${DRY_RUN}, courtCount=${courtCount}, alreadyBooked=${bookedCount}`
+      `[book-courts] Starting booking loop. BOOKING_DAY=${BOOKING_DAY}, BOOKING_SLOT=${BOOKING_SLOT}, DRY_RUN=${DRY_RUN}, courtCount=${courtCount}, alreadyBooked=${bookedCount}`
     );
     await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
     console.log(`[book-courts] Landed on booking URL: ${BOOKING_URL}`);
 
-    let dayNotVisible = false;
+    let dayFoundThisPass = false;
 
     let courtIdx = 0;
     while (courtIdx < courtsToTry.length) {
@@ -95,24 +105,20 @@ export async function runBookingFlow(page, courtCount) {
         .then(() => true)
         .catch(() => false);
       if (!dayVisible) {
-        const headers = await page
-          .locator('button.title')
-          .allInnerTexts()
+        const shownDates = await page
+          .locator('button.title .header-text')
+          .allTextContents()
           .catch(() => []);
         console.log(
-          `[book-courts] Day headers seen: ${JSON.stringify(
-            headers.map((h) => h.trim())
-          )}`
+          `[book-courts] ${BOOKING_DAY} not listed for court ${courtNum} (site shows: ${
+            shownDates.map((d) => d.trim()).join('; ') || 'no dates'
+          }); trying next court.`
         );
-        console.log(
-          `[book-courts] ${BOOKING_DAY} not yet available, waiting ${
-            DAY_RETRY_WAIT_MS / 1000
-          }s and retrying...`
-        );
-        await page.waitForTimeout(DAY_RETRY_WAIT_MS);
-        dayNotVisible = true;
-        break;
+        await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
+        courtIdx++;
+        continue;
       }
+      dayFoundThisPass = true;
 
       console.log(
         `[book-courts] Found ${BOOKING_DAY} date button, clicking it…`
@@ -125,10 +131,10 @@ export async function runBookingFlow(page, courtCount) {
 
       // Time slots are buttons whose aria-label starts with the time and includes the day,
       // e.g. aria-label="8:00 p.m. Monday August 24ᵗʰ, 2026"
-      const timeEscaped = BOOKING_TIME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const timeEscaped = BOOKING_SLOT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const timeLabelRegex = new RegExp(`^${timeEscaped}\\s+${dayEscaped}`);
       console.log(
-        `[book-courts] Looking for time slot starting with "${BOOKING_TIME}"…`
+        `[book-courts] Looking for time slot starting with "${BOOKING_SLOT}"…`
       );
       const allTimeSlots = page.locator(
         'button.time-container[aria-label], a[aria-label]'
@@ -166,7 +172,7 @@ export async function runBookingFlow(page, courtCount) {
         .catch(() => false);
       if (isUnavailable) {
         console.log(
-          `[book-courts] Court ${courtNum}: ${BOOKING_TIME} is taken, trying next court.`
+          `[book-courts] Court ${courtNum}: ${BOOKING_SLOT} is taken, trying next court.`
         );
         await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         courtIdx++;
@@ -182,8 +188,15 @@ export async function runBookingFlow(page, courtCount) {
       await page.waitForLoadState('networkidle');
 
       if (DRY_RUN) {
+        // Stop at the contact form: reaching it is a successful dry run.
+        await page.getByLabel(/phone number/i).waitFor();
+        const slotHeading = await page
+          .getByRole('heading', { name: /^Time:/ })
+          .first()
+          .innerText()
+          .catch(() => '');
         console.log(
-          `[book-courts] DRY_RUN=true: would book Squash - court ${courtNum} at ${BOOKING_TIME} (skipping contact details and confirmation).`
+          `[book-courts] DRY_RUN=true: reached contact form for Squash - court ${courtNum} (${slotHeading.trim()}); not submitting.`
         );
       } else {
         console.log('[book-courts] Filling contact form with env values…');
@@ -212,7 +225,7 @@ export async function runBookingFlow(page, courtCount) {
         }
 
         console.log(
-          `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_TIME}`
+          `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_SLOT}`
         );
       }
       bookedCount++;
@@ -250,25 +263,32 @@ export async function runBookingFlow(page, courtCount) {
       courtIdx++;
     }
 
-    // Exited court loop: if day wasn't visible we retry the while; otherwise we tried all courts
+    // Exited court loop: if no court listed the day we retry the while; otherwise we tried all courts
+    dayNotVisible = !dayFoundThisPass;
     if (!dayNotVisible) {
       break;
     }
+    console.log(
+      `[book-courts] ${BOOKING_DAY} not listed on any court yet, waiting ${
+        DAY_RETRY_WAIT_MS / 1000
+      }s and retrying...`
+    );
+    await page.waitForTimeout(DAY_RETRY_WAIT_MS);
   }
 
-  if (Date.now() >= deadline) {
-    dayUnavailable = true;
+  const dayUnavailable = dayNotVisible;
+  if (dayUnavailable) {
     console.log(
       `[book-courts] ${BOOKING_DAY} did not appear within 1 hour; reservations may not be open yet.`
     );
     console.log('[book-courts] DAY_UNAVAILABLE=1');
   } else if (bookedCount === 0) {
     console.log(
-      `[book-courts] No court had ${BOOKING_TIME} available in priority order.`
+      `[book-courts] No court had ${BOOKING_SLOT} available in priority order.`
     );
   } else {
     console.log(
-      `[book-courts] Booked ${bookedCount} court(s); no more had ${BOOKING_TIME} available.`
+      `[book-courts] Booked ${bookedCount} court(s); no more had ${BOOKING_SLOT} available.`
     );
   }
   console.log(`[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`);

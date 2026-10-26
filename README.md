@@ -41,6 +41,8 @@ Optional in `.env`:
 - `COMMAND_PREFIX` – default `!` (e.g. `!squash`).
 - `BOOKING_TIME` – when to run the booking script (e.g. `12:45pm`, `6pm`, `18:00`). Default: `12:45pm`.
 - `BOOKING_URL`, `BOOKING_USER`, `BOOKING_PASSWORD`, `HEADLESS` – used by your booking script if you need them.
+- `BOOKING_DAY`, `BOOKING_SLOT` – day of the week and time slot label to book on the site (default `Tuesday`, `8:00 p.m.`).
+- `DISCORD_VIDEO_CHANNEL_ID` – debug channel for a recording of the last booking attempt when not every needed court was booked.
 
 ### 3. Install and run
 
