@@ -50,6 +50,12 @@ async function main() {
     await runBookingFlow(page, COURT_COUNT, { freshPage: openPage });
   } finally {
     const recordedVideo = page.video();
+    // Playwright only finishes writing a recording when its context closes. Closing the browser
+    // alone left the video at 0 bytes, so close the context first.
+    await page
+      .context()
+      .close()
+      .catch((e) => console.error('[book-courts] could not close context:', e));
     await browser.close();
     if (recordedVideo) {
       try {

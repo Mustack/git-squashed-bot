@@ -34,11 +34,64 @@ const DRY_RUN = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
 const DRY_RUN_CLICK_DELAY_MS =
   Number(process.env.DRY_RUN_CLICK_DELAY || '2000') || 0;
 
-/** How long to keep retrying when the day isn't available yet (ms). */
-const DAY_RETRY_DEADLINE_MS = 60 * 60 * 1000;
+/**
+ * How long to keep retrying when the day isn't available yet (minutes). Override with DAY_RETRY_MINUTES;
+ * 0 means a single pass with no retries (used by the bot's preflight check).
+ */
+const DAY_RETRY_MINUTES = Number(process.env.DAY_RETRY_MINUTES ?? '60');
+const DAY_RETRY_DEADLINE_MS =
+  (Number.isFinite(DAY_RETRY_MINUTES) ? DAY_RETRY_MINUTES : 60) * 60 * 1000;
 
 /** Wait and refresh when the day link is missing (ms). */
 const DAY_RETRY_WAIT_MS = 3000;
+
+/**
+ * The site's phone field has a fixed +1 prefix and wants 10 digits "without hyphens";
+ * strip formatting and a leading country code so any BOOKING_PHONE format works.
+ */
+export function normalizePhone(raw) {
+  const digits = String(raw).replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('1')
+    ? digits.slice(1)
+    : digits;
+}
+
+/**
+ * Logs what the page is showing (URL, headings, validation/error messages, a text excerpt) and saves
+ * a screenshot, so a failed run can be diagnosed from the server logs alone.
+ * @param {import('playwright').Page} page
+ * @param {string} context
+ */
+export async function logPageDiagnostics(page, context) {
+  try {
+    const info = await page.evaluate(() => {
+      const visible = (el) => !!(el.offsetWidth || el.offsetHeight);
+      const texts = (sel) =>
+        [...document.querySelectorAll(sel)]
+          .filter(visible)
+          .map((el) => el.innerText.trim())
+          .filter(Boolean);
+      return {
+        headings: texts('h1, h2, h3'),
+        errors: texts(
+          '.field-validation-error, .validation-summary-errors, .alert, .error, [role=alert], .text-danger'
+        ),
+        buttons: texts('button, input[type=submit]'),
+        text: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 1500),
+      };
+    });
+    console.log(`[book-courts] DIAG (${context}) url=${page.url()}`);
+    console.log(`[book-courts] DIAG headings=${JSON.stringify(info.headings)}`);
+    console.log(`[book-courts] DIAG errors=${JSON.stringify(info.errors)}`);
+    console.log(`[book-courts] DIAG buttons=${JSON.stringify(info.buttons)}`);
+    console.log(`[book-courts] DIAG text=${info.text}`);
+    const shot = `test-results/diag-${Date.now()}.png`;
+    await page.screenshot({ path: shot, fullPage: true });
+    console.log(`[book-courts] DIAG screenshot=${shot}`);
+  } catch (e) {
+    console.error(`[book-courts] DIAG failed (${context}):`, e);
+  }
+}
 
 /**
  * Runs the booking flow on the given page. Tries to book up to courtCount courts in priority order.
@@ -56,10 +109,13 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
   let bookedCount = 0;
   /** @type {number[]} */
   const bookedCourts = [];
+  /** Courts where the day and slot were listed but the slot was already reserved. */
+  const takenCourts = new Set();
   let dayNotVisible = false;
   let attempt = 0;
 
-  while (Date.now() < deadline) {
+  // Always make at least one pass, even when the deadline is 0.
+  while (attempt === 0 || Date.now() < deadline) {
     if (attempt++ > 0 && freshPage) {
       page = await freshPage();
     }
@@ -174,6 +230,7 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
         console.log(
           `[book-courts] Court ${courtNum}: ${BOOKING_SLOT} is taken, trying next court.`
         );
+        takenCourts.add(courtNum);
         await page.goto(BOOKING_URL, { waitUntil: 'networkidle' });
         courtIdx++;
         continue;
@@ -210,19 +267,32 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
           );
         }
 
-        await page.getByLabel(/phone number/i).fill(phone);
+        await page.getByLabel(/phone number/i).fill(normalizePhone(phone));
         await page.getByLabel(/email address/i).fill(email);
         await page.getByLabel(/name/i).fill(name);
 
         console.log('[book-courts] Submitting confirmation buttons…');
-        await page.getByRole('button', { name: /confirm/i }).click();
-        if (DRY_RUN) {
-          await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
+        await page.getByRole('button', { name: /^confirm$/i }).click();
+        await page.waitForLoadState('networkidle');
+        const finalButton = page.getByRole('button', {
+          name: /final confirmation/i,
+        });
+        const reachedFinal = await finalButton
+          .waitFor({ state: 'visible', timeout: 15_000 })
+          .then(() => true)
+          .catch(() => false);
+        if (!reachedFinal) {
+          await logPageDiagnostics(page, `after Confirm on court ${courtNum}`);
+          throw new Error(
+            `No "Final confirmation" button after clicking Confirm on court ${courtNum}; see [book-courts] diagnostics above.`
+          );
         }
-        await page.getByRole('button', { name: /final confirmation/i }).click();
-        if (DRY_RUN) {
-          await page.waitForTimeout(DRY_RUN_CLICK_DELAY_MS);
-        }
+        await finalButton.click();
+        await page.waitForLoadState('networkidle');
+        await logPageDiagnostics(
+          page,
+          `after Final confirmation on court ${courtNum}`
+        );
 
         console.log(
           `[book-courts] Booked Squash - court ${courtNum} at ${BOOKING_SLOT}`
@@ -265,7 +335,7 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
 
     // Exited court loop: if no court listed the day we retry the while; otherwise we tried all courts
     dayNotVisible = !dayFoundThisPass;
-    if (!dayNotVisible) {
+    if (!dayNotVisible || Date.now() >= deadline) {
       break;
     }
     console.log(
@@ -279,7 +349,7 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
   const dayUnavailable = dayNotVisible;
   if (dayUnavailable) {
     console.log(
-      `[book-courts] ${BOOKING_DAY} did not appear within 1 hour; reservations may not be open yet.`
+      `[book-courts] ${BOOKING_DAY} did not appear within ${DAY_RETRY_MINUTES} minute(s); reservations may not be open yet.`
     );
     console.log('[book-courts] DAY_UNAVAILABLE=1');
   } else if (bookedCount === 0) {
@@ -291,6 +361,7 @@ export async function runBookingFlow(page, courtCount, { freshPage } = {}) {
       `[book-courts] Booked ${bookedCount} court(s); no more had ${BOOKING_SLOT} available.`
     );
   }
+  console.log(`[book-courts] SLOT_TAKEN_COURTS=${[...takenCourts].join(',')}`);
   console.log(`[book-courts] COURTS_BOOKED=${bookedCourts.join(',')}`);
   return { dayUnavailable };
 }

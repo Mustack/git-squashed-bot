@@ -43,6 +43,8 @@ Optional in `.env`:
 - `BOOKING_URL`, `BOOKING_USER`, `BOOKING_PASSWORD`, `HEADLESS` – used by your booking script if you need them.
 - `BOOKING_DAY`, `BOOKING_SLOT` – day of the week and time slot label to book on the site (default `Tuesday`, `8:00 p.m.`).
 - `DISCORD_VIDEO_CHANNEL_ID` – debug channel for a recording of the last booking attempt when not every needed court was booked.
+- `DISCORD_TEST_CHANNEL_ID` – when the poll is posted, the bot silently dry-runs the booking flow for the day before `BOOKING_DAY` (e.g. Monday for Tuesday) to catch site changes early. Results are logged to the console; failures are also posted here. Falls back to `DISCORD_VIDEO_CHANNEL_ID`.
+- `DAY_RETRY_MINUTES` – how long the booking script keeps retrying when `BOOKING_DAY` isn't listed yet (default `60`).
 
 ### 3. Install and run
 

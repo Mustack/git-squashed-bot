@@ -98,15 +98,45 @@ async function countReactions(message) {
   }
 }
 
+/** Channel for bot diagnostics (e.g. preflight failures). Falls back to DISCORD_VIDEO_CHANNEL_ID. */
+function getTestChannelId() {
+  return (process.env.DISCORD_TEST_CHANNEL_ID || '').trim() || getVideoChannelId();
+}
+
+const WEEKDAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
+/** Weekday before BOOKING_DAY (e.g. "Tuesday" -> "Monday"), or null if BOOKING_DAY isn't a weekday name. */
+function getPreflightDay() {
+  const i = WEEKDAYS.findIndex(
+    (d) => d.toLowerCase() === BOOKING_DAY.toLowerCase(),
+  );
+  if (i === -1) return null;
+  return WEEKDAYS[(i + WEEKDAYS.length - 1) % WEEKDAYS.length];
+}
+
 /**
  * Runs the booking script.
  * Returns an object { ok: boolean, videoPath: string | null } when DISCORD_VIDEO_CHANNEL_ID is set (recording).
+ * @param {number} count
+ * @param {Record<string, string>} [envOverrides] - extra env for the script (e.g. for the preflight dry run)
  */
-async function runBooking(count) {
+async function runBooking(count, envOverrides = {}) {
   const { spawn } = await import('child_process');
   return new Promise((resolve) => {
     console.log(`Running booking for ${count} court(s)...`);
-    const env = { ...process.env, COURT_COUNT: String(count) };
+    const env = {
+      ...process.env,
+      COURT_COUNT: String(count),
+      ...envOverrides,
+    };
     const child = spawn('node', ['src/run-booking.js'], {
       env,
       cwd: process.cwd(),
@@ -116,6 +146,8 @@ async function runBooking(count) {
     let videoPath = null;
     /** @type {number[] | null} */
     let courtsBooked = null;
+    /** @type {number[]} */
+    let slotTakenCourts = [];
     let dayUnavailable = false;
 
     child.stdout.on('data', (chunk) => {
@@ -136,6 +168,13 @@ async function runBooking(count) {
           .map((s) => parseInt(s.trim(), 10))
           .filter((n) => !Number.isNaN(n));
       }
+      const takenMatch = text.match(/SLOT_TAKEN_COURTS=([0-9,]+)/m);
+      if (takenMatch) {
+        slotTakenCourts = takenMatch[1]
+          .split(',')
+          .map((s) => parseInt(s, 10))
+          .filter((n) => !Number.isNaN(n));
+      }
     });
 
     child.stderr.on('data', (chunk) => {
@@ -148,10 +187,76 @@ async function runBooking(count) {
         ok: code === 0,
         videoPath,
         courtsBooked: courtsBooked || [],
+        slotTakenCourts,
         dayUnavailable,
       });
     });
   });
+}
+
+/**
+ * Silently dry-runs the booking flow for the day before BOOKING_DAY (already listed on the site when
+ * the poll goes out) to catch site/HTML changes before the real booking. Logs the result; posts to the
+ * test channel only on failure.
+ */
+async function runPreflightCheck() {
+  const day = getPreflightDay();
+  if (!day) {
+    console.warn(
+      `[preflight] BOOKING_DAY "${BOOKING_DAY}" is not a weekday name; skipping preflight check.`,
+    );
+    return;
+  }
+
+  console.log(`[preflight] Dry-running booking flow for ${day}...`);
+  let error = null;
+  try {
+    const { ok, courtsBooked, slotTakenCourts, dayUnavailable } =
+      await runBooking(1, {
+        DRY_RUN: 'true',
+        DRY_RUN_CLICK_DELAY: '0',
+        BOOKING_DAY: day,
+        DAY_RETRY_MINUTES: '0',
+        // No recording for the preflight run.
+        DISCORD_VIDEO_CHANNEL_ID: '',
+      });
+    if (!ok) {
+      error = `the booking script crashed while dry-running ${day} (the site's HTML may have changed). Check the server logs.`;
+    } else if (dayUnavailable) {
+      error = `${day} was not listed on any court. The site may have changed, or ${BOOKING_DAY} may not show up tonight.`;
+    } else if (courtsBooked.length) {
+      console.log(
+        `[preflight] PASS: reached the contact form for ${day} on court ${courtsBooked[0]}.`,
+      );
+    } else if (slotTakenCourts.length) {
+      console.log(
+        `[preflight] PASS (partial): ${day} is listed, but the slot was taken on court(s) ${slotTakenCourts.join(', ')}, so the contact form wasn't checked.`,
+      );
+    } else {
+      error = `${day} was listed, but no matching time slot was found on any court (the site's HTML may have changed).`;
+    }
+  } catch (e) {
+    error = `the preflight check threw: ${e.message}`;
+  }
+
+  if (!error) return;
+  console.error(`[preflight] FAIL: ${error}`);
+
+  const testChannelId = getTestChannelId();
+  if (!testChannelId) {
+    console.warn(
+      '[preflight] No DISCORD_TEST_CHANNEL_ID or DISCORD_VIDEO_CHANNEL_ID set; not posting the failure.',
+    );
+    return;
+  }
+  try {
+    const channel = await client.channels.fetch(testChannelId);
+    await channel.send(
+      `⚠️ Booking preflight check failed: ${error} The upcoming ${BOOKING_DAY} booking may not work: ${BOOKING_URL}`,
+    );
+  } catch (e) {
+    console.error('[preflight] Failed to post to test channel:', e);
+  }
 }
 
 async function deleteBookingVideoFile(videoPath) {
@@ -337,6 +442,7 @@ client.on('clientReady', () => {
           const pollMessage = await channel.send(POLL_TEXT);
           await pollMessage.react(REACTION_EMOJI);
           scheduleBookingForToday(channel.id, pollMessage.id);
+          void runPreflightCheck();
         } catch (e) {
           console.error('DRY_RUN poll failed:', e.message);
         }
@@ -364,6 +470,7 @@ client.on('clientReady', () => {
           const pollMessage = await channel.send(POLL_TEXT);
           await pollMessage.react(REACTION_EMOJI);
           scheduleBookingForToday(channel.id, pollMessage.id);
+          void runPreflightCheck();
         } catch (e) {
           console.error('Sunday poll failed:', e.message);
           if (e.code === 50001) {
@@ -408,6 +515,7 @@ client.on('messageCreate', async (message) => {
     const pollMessage = await message.channel.send(POLL_TEXT);
     await pollMessage.react(REACTION_EMOJI);
     scheduleBookingForToday(message.channel.id, pollMessage.id);
+    void runPreflightCheck();
     await message.channel.send(
       `Poll posted. React with ${REACTION_EMOJI} if you're in. Booking will run at **${formatTime(
         getBookingTime(),
